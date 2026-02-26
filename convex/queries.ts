@@ -1,0 +1,74 @@
+import { query } from "./_generated/server";
+import { v } from "convex/values";
+
+/** 特定エージェントのステータスを取得 */
+export const getAgentStatus = query({
+  args: { agent_id: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const id = args.agent_id ?? "openclaw-main";
+    return await ctx.db
+      .query("agents")
+      .withIndex("by_agent_id", (q) => q.eq("agent_id", id))
+      .unique();
+  },
+});
+
+/** 全エージェント一覧（Office / Dashboard 用） */
+export const getAllAgents = query({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.db.query("agents").collect();
+  },
+});
+
+/** 特定エージェントのモデルステータス一覧 */
+export const getModelStatusForAgent = query({
+  args: { agent_id: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const id = args.agent_id ?? "openclaw-main";
+    return await ctx.db
+      .query("model_status")
+      .withIndex("by_agent_id", (q) => q.eq("agent_id", id))
+      .collect();
+  },
+});
+
+/** 後方互換: 全モデルステータス */
+export const getAllModelStatus = query({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.db.query("model_status").collect();
+  },
+});
+
+export const getRecentJobs = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("jobs")
+      .withIndex("by_started_at")
+      .order("desc")
+      .take(args.limit ?? 50);
+  },
+});
+
+export const getJob = query({
+  args: { job_id: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("jobs")
+      .withIndex("by_job_id", (q) => q.eq("job_id", args.job_id))
+      .unique();
+  },
+});
+
+export const getJobLogs = query({
+  args: { job_id: v.string(), limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("logs")
+      .withIndex("by_job_id_ts", (q) => q.eq("job_id", args.job_id))
+      .order("asc")
+      .take(args.limit ?? 200);
+  },
+});
