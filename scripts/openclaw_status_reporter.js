@@ -20,7 +20,7 @@
  * 環境変数:
  *   OPENCLAW_SECRET   (必須) Bearer トークン
  *   AGENT_ID          (任意) デフォルト: "openclaw-main"
- *   CONVEX_SITE_URL   (任意) デフォルト: https://reliable-jay-929.convex.site
+ *   CONVEX_SITE_URL   (任意) デフォルト: https://opulent-clam-873.convex.site
  *   CURRENT_TASK      (任意) heartbeat の current_task
  *   INTERVAL_SEC      (任意) ポーリング間隔秒数、デフォルト 5
  */
@@ -29,7 +29,7 @@ import { execSync } from "node:child_process";
 
 // ── 設定 ──────────────────────────────────────────────
 const CONVEX_SITE_URL =
-  process.env.CONVEX_SITE_URL ?? "https://reliable-jay-929.convex.site";
+  process.env.CONVEX_SITE_URL ?? "https://opulent-clam-873.convex.site";
 const INTERVAL_MS = Number(process.env.INTERVAL_SEC ?? 5) * 1000;
 const AGENT_ID = process.env.AGENT_ID ?? "openclaw-main";
 

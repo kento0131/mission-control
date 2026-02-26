@@ -11,7 +11,7 @@
  * 環境変数:
  *   OPENCLAW_SECRET   (必須)
  *   AGENT_ID          (任意) デフォルト: "openclaw-main"
- *   CONVEX_SITE_URL   (任意) デフォルト: https://reliable-jay-929.convex.site
+ *   CONVEX_SITE_URL   (任意) デフォルト: https://opulent-clam-873.convex.site
  *   CURRENT_TASK      (任意)
  *   CURRENT_MODEL     (任意) 未設定時は自動検出
  */
@@ -22,7 +22,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 const CONVEX_SITE_URL =
-  process.env.CONVEX_SITE_URL ?? "https://reliable-jay-929.convex.site";
+  process.env.CONVEX_SITE_URL ?? "https://opulent-clam-873.convex.site";
 const ENDPOINT    = `${CONVEX_SITE_URL}/api/openclaw/heartbeat`;
 const INTERVAL_MS = 5000;
 const AGENT_ID    = process.env.AGENT_ID ?? "openclaw-main";

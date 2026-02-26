@@ -14,7 +14,7 @@
  */
 
 const CONVEX_SITE_URL =
-  process.env.CONVEX_SITE_URL ?? "https://reliable-jay-929.convex.site";
+  process.env.CONVEX_SITE_URL ?? "https://opulent-clam-873.convex.site";
 const ENDPOINT = `${CONVEX_SITE_URL}/api/openclaw/model_status`;
 
 const secret = process.env.OPENCLAW_SECRET;
