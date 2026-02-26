@@ -10,6 +10,9 @@ import { formatRelativeTime, DOWN_THRESHOLD_MS } from "../../lib/utils";
 // ── 定数 ──────────────────────────────────────────────
 const SEED_AGENTS = ["openclaw-main", "discord-bot", "calendar-worker"];
 
+/** 3状態ランプ: 2分以上更新なし → OFFLINE */
+const LAMP_OFFLINE_MS = 2 * 60 * 1000;
+
 const AVATAR_PALETTE = [
   "#6366f1", "#ec4899", "#f59e0b", "#10b981",
   "#3b82f6", "#8b5cf6", "#14b8a6", "#f97316",
@@ -112,6 +115,42 @@ function StatusBadge({ status }: { status: keyof typeof STATUS_COLOR }) {
   );
 }
 
+// ── StatusLamp ─────────────────────────────────────────
+type LampState = "offline" | "active" | "idle";
+
+function getLampState(agent: AgentRow | undefined): LampState {
+  if (!agent || Date.now() - agent.last_seen > LAMP_OFFLINE_MS) return "offline";
+  if (agent.current_task) return "active";
+  return "idle";
+}
+
+const LAMP: Record<LampState, { color: string; shadow: string; pulse: boolean; label: string }> = {
+  offline: { color: "#ef4444", shadow: "0 0 6px 3px #ef444455", pulse: false, label: "OFFLINE" },
+  active:  { color: "#3b82f6", shadow: "0 0 8px 4px #3b82f655", pulse: true,  label: "ACTIVE"  },
+  idle:    { color: "#22c55e", shadow: "0 0 6px 3px #22c55e55", pulse: false, label: "IDLE"    },
+};
+
+function StatusLamp({ agent }: { agent: AgentRow | undefined }) {
+  const state = getLampState(agent);
+  const { color, shadow, pulse, label } = LAMP[state];
+  return (
+    <div
+      title={label}
+      style={{
+        width: 12,
+        height: 12,
+        borderRadius: "50%",
+        backgroundColor: color,
+        boxShadow: shadow,
+        flexShrink: 0,
+        alignSelf: "flex-start",
+        marginTop: 3,
+        animation: pulse ? "screen-running 2s ease-in-out infinite" : undefined,
+      }}
+    />
+  );
+}
+
 function MiniBar({ label, value }: { label: string; value: number }) {
   const color = value > 20 ? "#22c55e" : value > 5 ? "#eab308" : "#ef4444";
   return (
@@ -185,7 +224,7 @@ function AgentCard({
       onMouseEnter={(e) => { if (!selected) (e.currentTarget as HTMLElement).style.backgroundColor = "var(--bg-card-hover)"; }}
       onMouseLeave={(e) => { if (!selected) (e.currentTarget as HTMLElement).style.backgroundColor = "var(--bg-card)"; }}
     >
-      {/* 上段: avatar + status + last_seen */}
+      {/* 上段: avatar + status + last_seen + lamp */}
       <div style={{ display: "flex", alignItems: "flex-start", gap: "0.625rem", marginBottom: "0.625rem" }}>
         <Avatar id={agentId} size={36} />
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -194,6 +233,7 @@ function AgentCard({
             {agent?.last_seen ? formatRelativeTime(agent.last_seen) : "no data"}
           </p>
         </div>
+        <StatusLamp agent={agent} />
       </div>
 
       {/* agent_id */}
