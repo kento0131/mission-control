@@ -28,16 +28,25 @@
 import { execSync } from "node:child_process";
 
 // ── 設定 ──────────────────────────────────────────────
-const CONVEX_SITE_URL =
-  process.env.CONVEX_SITE_URL ?? "https://opulent-clam-873.convex.site";
-const INTERVAL_MS = Number(process.env.INTERVAL_SEC ?? 5) * 1000;
-const AGENT_ID = process.env.AGENT_ID ?? "openclaw-main";
+// pm2 / shell 経由で末尾 \n や不可視文字が混入するケースへの対策として
+// すべての env 値を printable ASCII のみに絞り込む
+const sanitize = (v) => (v ?? "").replace(/[^\x20-\x7E]/g, "").trim();
 
-const secret = process.env.OPENCLAW_SECRET;
+const CONVEX_SITE_URL =
+  sanitize(process.env.CONVEX_SITE_URL) || "https://opulent-clam-873.convex.site";
+const INTERVAL_MS = Number(process.env.INTERVAL_SEC ?? 5) * 1000;
+const AGENT_ID = sanitize(process.env.AGENT_ID) || "openclaw-main";
+
+const secret = sanitize(process.env.OPENCLAW_SECRET);
 if (!secret) {
   console.error("ERROR: OPENCLAW_SECRET environment variable is not set.");
   console.error("  PowerShell : $env:OPENCLAW_SECRET='your-token'");
   console.error("  bash       : export OPENCLAW_SECRET='your-token'");
+  process.exit(1);
+}
+if (!/^[0-9a-f]{64}$/i.test(secret)) {
+  console.error(`ERROR: OPENCLAW_SECRET is invalid (got ${secret.length} chars, expected 64 hex).`);
+  console.error("  Possible cause: trailing newline or invisible character from pm2/env file.");
   process.exit(1);
 }
 
