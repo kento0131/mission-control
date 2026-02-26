@@ -457,12 +457,15 @@ export default function DashboardPage() {
     [allAgents]
   );
 
-  // agent_id → ModelRow[]
+  // agent_id → ModelRow[]（updated_at 降順: models[0] が最新）
   const modelMap = useMemo(() => {
     const m = new Map<string, ModelRow[]>();
     for (const row of allModels ?? []) {
       if (!m.has(row.agent_id)) m.set(row.agent_id, []);
       m.get(row.agent_id)!.push(row as ModelRow);
+    }
+    for (const rows of m.values()) {
+      rows.sort((a, b) => b.updated_at - a.updated_at);
     }
     return m;
   }, [allModels]);

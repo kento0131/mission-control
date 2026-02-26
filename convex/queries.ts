@@ -21,23 +21,25 @@ export const getAllAgents = query({
   },
 });
 
-/** 特定エージェントのモデルステータス一覧 */
+/** 特定エージェントのモデルステータス一覧（updated_at 降順） */
 export const getModelStatusForAgent = query({
   args: { agent_id: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const id = args.agent_id ?? "openclaw-main";
-    return await ctx.db
+    const rows = await ctx.db
       .query("model_status")
       .withIndex("by_agent_id", (q) => q.eq("agent_id", id))
       .collect();
+    return rows.sort((a, b) => b.updated_at - a.updated_at);
   },
 });
 
-/** 後方互換: 全モデルステータス */
+/** 後方互換: 全モデルステータス（updated_at 降順） */
 export const getAllModelStatus = query({
   args: {},
   handler: async (ctx) => {
-    return await ctx.db.query("model_status").collect();
+    const rows = await ctx.db.query("model_status").collect();
+    return rows.sort((a, b) => b.updated_at - a.updated_at);
   },
 });
 
