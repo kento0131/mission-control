@@ -18,26 +18,39 @@
  *   node scripts/openclaw_status_reporter.js
  *
  * 環境変数:
- *   OPENCLAW_SECRET   (必須) Bearer トークン
- *   AGENT_ID          (任意) デフォルト: "openclaw-main"
- *   CONVEX_SITE_URL   (任意) デフォルト: https://opulent-clam-873.convex.site
- *   CURRENT_TASK      (任意) heartbeat の current_task
- *   INTERVAL_SEC      (任意) ポーリング間隔秒数、デフォルト 5
+ *   OPENCLAW_SECRET     (必須) Bearer トークン (64 hex)
+ *   AGENT_ID            (任意) デフォルト: "openclaw-main"
+ *   CONVEX_SITE_URL     (任意) デフォルト: https://opulent-clam-873.convex.site
+ *   CURRENT_TASK        (任意) heartbeat の current_task。日本語可。
+ *   CURRENT_MODEL       (任意) 自動検出に失敗した場合のフォールバック
+ *   REMAINING_PERCENT   (任意) openclaw コマンドが使えない環境向けの手動指定 (0-100)
+ *   REMAINING_DAY_PCT   (任意) 同上、当日残量 (0-100)
+ *   INTERVAL_SEC        (任意) ポーリング間隔秒数、デフォルト 5
  */
 
 import { execSync } from "node:child_process";
 
+// ── サニタイズ ─────────────────────────────────────────
+/**
+ * ASCII identifier 用: 表示可能 ASCII のみ残す（secret / agent_id / URL 向け）。
+ * 日本語などのマルチバイト文字は除去される点に注意。
+ */
+const sanitizeAscii = (v) => (v ?? "").replace(/[^\x20-\x7E]/g, "").trim();
+
+/**
+ * 汎用テキスト用: 制御文字 (0x00-0x1F, 0x7F) のみ除去し、
+ * 日本語 / emoji などの Unicode 文字は保持する。
+ * current_task / current_model など表示用フィールドに使用する。
+ */
+const sanitizeText = (v) => (v ?? "").replace(/[\x00-\x1F\x7F]/g, "").trim();
+
 // ── 設定 ──────────────────────────────────────────────
-// pm2 / shell 経由で末尾 \n や不可視文字が混入するケースへの対策として
-// すべての env 値を printable ASCII のみに絞り込む
-const sanitize = (v) => (v ?? "").replace(/[^\x20-\x7E]/g, "").trim();
-
 const CONVEX_SITE_URL =
-  sanitize(process.env.CONVEX_SITE_URL) || "https://opulent-clam-873.convex.site";
+  sanitizeAscii(process.env.CONVEX_SITE_URL) || "https://opulent-clam-873.convex.site";
 const INTERVAL_MS = Number(process.env.INTERVAL_SEC ?? 5) * 1000;
-const AGENT_ID = sanitize(process.env.AGENT_ID) || "openclaw-main";
+const AGENT_ID    = sanitizeAscii(process.env.AGENT_ID) || "openclaw-main";
 
-const secret = sanitize(process.env.OPENCLAW_SECRET);
+const secret = sanitizeAscii(process.env.OPENCLAW_SECRET);
 if (!secret) {
   console.error("ERROR: OPENCLAW_SECRET environment variable is not set.");
   console.error("  PowerShell : $env:OPENCLAW_SECRET='your-token'");
@@ -54,10 +67,14 @@ if (!/^[0-9a-f]{64}$/i.test(secret)) {
 /**
  * `openclaw models status` の出力テキストを解析して返す。
  *
- * 対象パターン:
- *   Default: <model>
- *   openai-codex usage: <N>% left
- *   Day <N>% left
+ * 対応フォーマット（複数形式):
+ *   Default: <model>                         → model 名
+ *   Model: <model>                           → model 名 (別形式)
+ *   usage: <N>% left                         → remaining_percent
+ *   Day <N>% left                            → remaining_day_percent
+ *   <N>% remaining                           → remaining_percent (別形式)
+ *   remaining: <N>%                          → remaining_percent (別形式)
+ *   Quota: <N>% used → 100-N を計算          → remaining_percent
  */
 function parseOpenclawModelsStatus(text) {
   const result = {
@@ -67,14 +84,45 @@ function parseOpenclawModelsStatus(text) {
     raw: text.trim(),
   };
 
-  const defaultMatch = text.match(/Default:\s*(.+)/);
-  if (defaultMatch) result.model = defaultMatch[1].trim();
+  // model 名取得 (複数パターン)
+  const defaultMatch = text.match(/Default:\s*(.+)/i);
+  if (defaultMatch) result.model = sanitizeText(defaultMatch[1]);
 
+  if (!result.model) {
+    const modelMatch = text.match(/^Model:\s*(.+)/im);
+    if (modelMatch) result.model = sanitizeText(modelMatch[1]);
+  }
+  if (!result.model) {
+    const currentMatch = text.match(/Current(?:\s+model)?:\s*(.+)/i);
+    if (currentMatch) result.model = sanitizeText(currentMatch[1]);
+  }
+
+  // remaining_percent (複数パターン)
   const usageMatch = text.match(/usage:\s*(\d+(?:\.\d+)?)%\s*left/i);
   if (usageMatch) result.remaining_percent = parseFloat(usageMatch[1]);
 
+  if (result.remaining_percent === null) {
+    const remainMatch = text.match(/(\d+(?:\.\d+)?)\s*%\s*remaining/i);
+    if (remainMatch) result.remaining_percent = parseFloat(remainMatch[1]);
+  }
+  if (result.remaining_percent === null) {
+    const remainMatch2 = text.match(/remaining:\s*(\d+(?:\.\d+)?)%/i);
+    if (remainMatch2) result.remaining_percent = parseFloat(remainMatch2[1]);
+  }
+  if (result.remaining_percent === null) {
+    // "Quota: N% used" → 100 - N
+    const quotaMatch = text.match(/[Qq]uota:\s*(\d+(?:\.\d+)?)%\s*used/i);
+    if (quotaMatch) result.remaining_percent = Math.max(0, 100 - parseFloat(quotaMatch[1]));
+  }
+
+  // remaining_day_percent
   const dayMatch = text.match(/Day\s+(\d+(?:\.\d+)?)%\s*left/i);
   if (dayMatch) result.remaining_day_percent = parseFloat(dayMatch[1]);
+
+  if (result.remaining_day_percent === null) {
+    const dayMatch2 = text.match(/[Dd]aily.*?(\d+(?:\.\d+)?)%/);
+    if (dayMatch2) result.remaining_day_percent = parseFloat(dayMatch2[1]);
+  }
 
   return result;
 }
@@ -90,7 +138,7 @@ function runOpenclawModelsStatus() {
   } catch (err) {
     const msg = err.stderr ?? err.message ?? "";
     if (!msg.includes("not found") && !msg.includes("ENOENT")) {
-      console.error(`[reporter] openclaw models status failed: ${msg.slice(0, 120)}`);
+      console.error(`[reporter] openclaw models status failed: ${msg.slice(0, 200)}`);
     }
     return null;
   }
@@ -104,7 +152,7 @@ async function post(path, body) {
       method: "POST",
       headers: {
         Authorization: `Bearer ${secret}`,
-        "Content-Type": "application/json",
+        "Content-Type": "application/json; charset=utf-8",
       },
       body: JSON.stringify(body),
     });
@@ -126,40 +174,58 @@ let timer;
 async function report() {
   const parsed = runOpenclawModelsStatus();
 
-  const currentModel = parsed?.model ?? process.env.CURRENT_MODEL ?? "unknown";
-  const currentTask  = process.env.CURRENT_TASK ?? "monitoring";
+  // current_model の決定順: openclaw 出力 → CURRENT_MODEL env → "unknown"
+  const currentModel = sanitizeText(
+    parsed?.model ?? process.env.CURRENT_MODEL ?? "unknown"
+  );
+  // current_task: 日本語対応のため sanitizeText を使用
+  const currentTask = sanitizeText(process.env.CURRENT_TASK ?? "monitoring");
 
   // heartbeat
   await post("/api/openclaw/heartbeat", {
-    agent_id: AGENT_ID,
-    status: "running",
-    current_task: currentTask,
+    agent_id:      AGENT_ID,
+    status:        "running",
+    current_task:  currentTask,
     current_model: currentModel,
   });
 
-  // model_status（解析できた場合のみ）
-  if (parsed && parsed.remaining_percent !== null) {
+  // model_status の決定:
+  //   1. openclaw コマンドで取得できた場合
+  //   2. env var REMAINING_PERCENT が設定されている場合（コマンド利用不可環境向け）
+  let remainingPercent    = parsed?.remaining_percent ?? null;
+  let remainingDayPercent = parsed?.remaining_day_percent ?? null;
+
+  // env var フォールバック
+  if (remainingPercent === null && process.env.REMAINING_PERCENT !== undefined) {
+    remainingPercent = parseFloat(process.env.REMAINING_PERCENT);
+  }
+  if (remainingDayPercent === null && process.env.REMAINING_DAY_PCT !== undefined) {
+    remainingDayPercent = parseFloat(process.env.REMAINING_DAY_PCT);
+  }
+
+  if (remainingPercent !== null && !isNaN(remainingPercent)) {
     const payload = {
-      agent_id: AGENT_ID,
-      model: currentModel,
-      remaining_percent: parsed.remaining_percent,
-      raw: parsed.raw,
+      agent_id:          AGENT_ID,
+      model:             currentModel,
+      remaining_percent: remainingPercent,
+      raw:               parsed?.raw ?? `manual:${remainingPercent}%`,
     };
-    if (parsed.remaining_day_percent !== null) {
-      payload.remaining_day_percent = parsed.remaining_day_percent;
+    if (remainingDayPercent !== null && !isNaN(remainingDayPercent)) {
+      payload.remaining_day_percent = remainingDayPercent;
     }
     await post("/api/openclaw/model_status", payload);
 
     const dayStr =
-      parsed.remaining_day_percent !== null
-        ? ` / Day ${parsed.remaining_day_percent}%`
+      remainingDayPercent !== null
+        ? ` / Day ${remainingDayPercent}%`
         : "";
     console.log(
-      `[${new Date().toISOString()}] [${AGENT_ID}] ${currentModel}  usage ${parsed.remaining_percent}%${dayStr}`
+      `[${new Date().toISOString()}] [${AGENT_ID}] ${currentModel}  usage ${remainingPercent}%${dayStr}`
     );
   } else {
     console.log(
-      `[${new Date().toISOString()}] [${AGENT_ID}] heartbeat sent (model status unavailable)`
+      `[${new Date().toISOString()}] [${AGENT_ID}] heartbeat sent (model status unavailable)` +
+      ` — set REMAINING_PERCENT=<0-100> env var to force model_status reporting`
     );
   }
 }
@@ -172,10 +238,10 @@ async function shutdown(signal) {
 
   console.log(`\n[${new Date().toISOString()}] ${signal} — sending stopped...`);
   await post("/api/openclaw/heartbeat", {
-    agent_id: AGENT_ID,
-    status: "stopped",
-    current_task: "idle",
-    current_model: process.env.CURRENT_MODEL ?? "unknown",
+    agent_id:      AGENT_ID,
+    status:        "stopped",
+    current_task:  "idle",
+    current_model: sanitizeText(process.env.CURRENT_MODEL ?? "unknown"),
   });
   console.log("Stopped. Exiting.");
   process.exit(0);
