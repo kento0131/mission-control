@@ -292,9 +292,9 @@ function AgentCard({
       {/* resource bars */}
       {topModel ? (
         <>
-          <MiniBar label="Usage" value={topModel.remaining_percent} />
+          <MiniBar label="Usage（セッション残量）" value={topModel.remaining_percent} />
           {topModel.remaining_day_percent !== undefined && (
-            <MiniBar label="Day" value={topModel.remaining_day_percent} />
+            <MiniBar label="Day（本日残量）" value={topModel.remaining_day_percent} />
           )}
         </>
       ) : (
@@ -451,7 +451,7 @@ function DetailPanel({
         <div style={{ padding: "1.25rem", flex: 1 }}>
 
           {/* STATUS */}
-          <SectionHeader>{ja.status.running}</SectionHeader>
+          <SectionHeader>ステータス</SectionHeader>
           {agent ? (
             <div style={{ marginBottom: "1.25rem" }}>
               <DetailRow label={ja.agent.lastSeen}>{formatRelativeTime(agent.last_seen)}</DetailRow>
@@ -477,9 +477,9 @@ function DetailPanel({
               {models.map((m) => (
                 <div key={m._id} style={{ marginBottom: "1rem" }}>
                   <p style={{ fontFamily: "monospace", fontSize: "0.875rem", marginBottom: "0.5rem" }}>{m.model}</p>
-                  <FullBar label="Usage" value={m.remaining_percent} />
+                  <FullBar label="Usage（セッション残量）" value={m.remaining_percent} />
                   {m.remaining_day_percent !== undefined && (
-                    <FullBar label="Day" value={m.remaining_day_percent} />
+                    <FullBar label="Day（本日残量）" value={m.remaining_day_percent} />
                   )}
                   <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: 4 }}>
                     Updated {formatRelativeTime(m.updated_at)}
@@ -669,15 +669,23 @@ export default function DashboardPage() {
     [allAgents]
   );
 
-  // agent_id → ModelRow[]（updated_at 降順: models[0] が最新）
+  // agent_id → ModelRow[]（updated_at 降順 / 同一model重複は最新1件に正規化）
   const modelMap = useMemo(() => {
     const m = new Map<string, ModelRow[]>();
     for (const row of allModels ?? []) {
       if (!m.has(row.agent_id)) m.set(row.agent_id, []);
       m.get(row.agent_id)!.push(row as ModelRow);
     }
-    for (const rows of m.values()) {
+    for (const [agentId, rows] of m.entries()) {
       rows.sort((a, b) => b.updated_at - a.updated_at);
+      const seen = new Set<string>();
+      const deduped: ModelRow[] = [];
+      for (const r of rows) {
+        if (seen.has(r.model)) continue;
+        seen.add(r.model);
+        deduped.push(r);
+      }
+      m.set(agentId, deduped);
     }
     return m;
   }, [allModels]);
