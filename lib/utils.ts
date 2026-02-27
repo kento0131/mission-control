@@ -1,6 +1,6 @@
 /** heartbeat が N 秒以上届かなければ DOWN と判定する閾値。
- *  5 秒間隔 × 3 = 15 秒をデフォルトに設定。 */
-export const DOWN_THRESHOLD_MS = 15 * 1000;
+ *  M1仕様: 10秒を超えたらオフライン扱い。 */
+export const DOWN_THRESHOLD_MS = 10 * 1000;
 
 export function formatRelativeTime(ms: number): string {
   const diff = Date.now() - ms;

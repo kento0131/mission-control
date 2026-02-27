@@ -11,8 +11,8 @@ import { ja } from "../../lib/i18n/ja";
 // ── 定数 ──────────────────────────────────────────────
 const SEED_AGENTS = ["openclaw-main", "discord-bot", "calendar-worker"];
 
-/** 3状態ランプ: 2分以上更新なし → OFFLINE */
-const LAMP_OFFLINE_MS = 2 * 60 * 1000;
+/** 3状態ランプ: DOWN 判定と同じ閾値で揃える */
+const LAMP_OFFLINE_MS = DOWN_THRESHOLD_MS;
 
 const AVATAR_PALETTE = [
   "#6366f1", "#ec4899", "#f59e0b", "#10b981",

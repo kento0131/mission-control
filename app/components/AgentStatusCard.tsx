@@ -8,12 +8,24 @@ import { formatRelativeTime, DOWN_THRESHOLD_MS } from "../../lib/utils";
 type EffectiveStatus = "running" | "idle" | "stopped" | "down";
 
 export function getEffectiveStatus(
-  data: { status: string; last_seen: number } | null | undefined
+  data: { status: string; last_seen: number; current_task?: string } | null | undefined
 ): EffectiveStatus {
   if (!data) return "down";
-  if (data.status === "stopped") return "stopped";
+
+  // stale heartbeat は最優先で down（"オフラインなのに稼働中" を防ぐ）
   if (Date.now() - data.last_seen > DOWN_THRESHOLD_MS) return "down";
-  return data.status as EffectiveStatus;
+
+  // stopped は明示的に優先
+  if (data.status === "stopped") return "stopped";
+
+  // current_task がある間は running 扱い
+  if (data.current_task && data.current_task.trim().length > 0) return "running";
+
+  // それ以外は idle に正規化
+  if (data.status === "running") return "idle";
+  if (data.status === "idle") return "idle";
+
+  return "idle";
 }
 
 export function AgentStatusCard({ agentId = "openclaw-main" }: { agentId?: string }) {
