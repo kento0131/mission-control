@@ -64,12 +64,70 @@ export const getJob = query({
   },
 });
 
+export const getRecentJobEvents = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("job_events")
+      .withIndex("by_created_at")
+      .order("desc")
+      .take(args.limit ?? 10);
+  },
+});
+
 export const getJobLogs = query({
   args: { job_id: v.string(), limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
     return await ctx.db
       .query("logs")
       .withIndex("by_job_id_ts", (q) => q.eq("job_id", args.job_id))
+      .order("asc")
+      .take(args.limit ?? 200);
+  },
+});
+
+export const getRecentJobHistory = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("job_history")
+      .withIndex("by_started_at")
+      .order("desc")
+      .take(args.limit ?? 10);
+  },
+});
+
+export const getJobHistoryForAgent = query({
+  args: { agent_id: v.string(), limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("job_history")
+      .withIndex("by_agent_id", (q) => q.eq("agent_id", args.agent_id))
+      .order("desc")
+      .take(args.limit ?? 10);
+    return rows.sort((a, b) => b.started_at - a.started_at);
+  },
+});
+
+export const getCalendarEventsInRange = query({
+  args: { start: v.number(), end: v.number() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("calendar_events")
+      .withIndex("by_start_at", (q) =>
+        q.gte("start_at", args.start).lte("start_at", args.end)
+      )
+      .order("asc")
+      .collect();
+  },
+});
+
+export const getAllCalendarEvents = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("calendar_events")
+      .withIndex("by_start_at")
       .order("asc")
       .take(args.limit ?? 200);
   },

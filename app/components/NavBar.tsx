@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ja } from "../../lib/i18n/ja";
 
 const links = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/office",    label: "Office"    },
-  { href: "/jobs",      label: "Jobs"      },
+  { href: "/dashboard", label: ja.nav.dashboard },
+  { href: "/office",    label: ja.nav.office    },
+  { href: "/jobs",      label: ja.nav.jobs      },
+  { href: "/calendar",  label: ja.nav.calendar  },
 ];
 
 export function NavBar() {

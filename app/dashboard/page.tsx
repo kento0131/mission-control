@@ -6,6 +6,7 @@ import { api } from "../../convex/_generated/api";
 import { getEffectiveStatus } from "../components/AgentStatusCard";
 import { JobsTable } from "../components/JobsTable";
 import { formatRelativeTime, DOWN_THRESHOLD_MS } from "../../lib/utils";
+import { ja } from "../../lib/i18n/ja";
 
 // ── 定数 ──────────────────────────────────────────────
 const SEED_AGENTS = ["openclaw-main", "discord-bot", "calendar-worker"];
@@ -78,6 +79,18 @@ type JobRow = {
   finished_at?: number;
 };
 
+type JobEventRow = {
+  _id: string;
+  agent_id: string;
+  type: "job_started" | "job_completed";
+  task: string;
+  created_at: number;
+};
+
+type FeedItem =
+  | { kind: "job";   ts: number; id: string; agent_id?: string; label: string; badge: string; color: string }
+  | { kind: "event"; ts: number; id: string; agent_id: string;  label: string; badge: string; color: string };
+
 // ── サブコンポーネント ─────────────────────────────────
 
 function Avatar({ id, size = 40 }: { id: string; size?: number }) {
@@ -96,6 +109,13 @@ function Avatar({ id, size = 40 }: { id: string; size?: number }) {
   );
 }
 
+const STATUS_LABEL: Record<keyof typeof STATUS_COLOR, string> = {
+  running: ja.status.running,
+  idle:    ja.status.idle,
+  stopped: ja.status.stopped,
+  down:    ja.status.down,
+};
+
 function StatusBadge({ status }: { status: keyof typeof STATUS_COLOR }) {
   const color     = STATUS_COLOR[status];
   const isRunning = status === "running";
@@ -110,7 +130,7 @@ function StatusBadge({ status }: { status: keyof typeof STATUS_COLOR }) {
         boxShadow: isRunning ? `0 0 6px 2px ${color}80` : undefined,
         animation: isRunning ? "screen-running 2s ease-in-out infinite" : undefined,
       }} />
-      {status.toUpperCase()}
+      {STATUS_LABEL[status]}
     </span>
   );
 }
@@ -125,9 +145,9 @@ function getLampState(agent: AgentRow | undefined): LampState {
 }
 
 const LAMP: Record<LampState, { color: string; shadow: string; pulse: boolean; label: string }> = {
-  offline: { color: "#ef4444", shadow: "0 0 6px 3px #ef444455", pulse: false, label: "OFFLINE" },
-  active:  { color: "#3b82f6", shadow: "0 0 8px 4px #3b82f655", pulse: true,  label: "ACTIVE"  },
-  idle:    { color: "#22c55e", shadow: "0 0 6px 3px #22c55e55", pulse: false, label: "IDLE"    },
+  offline: { color: "#ef4444", shadow: "0 0 6px 3px #ef444455", pulse: false, label: ja.lamp.offline },
+  active:  { color: "#3b82f6", shadow: "0 0 8px 4px #3b82f655", pulse: true,  label: ja.lamp.active  },
+  idle:    { color: "#22c55e", shadow: "0 0 6px 3px #22c55e55", pulse: false, label: ja.lamp.idle    },
 };
 
 function StatusLamp({ agent }: { agent: AgentRow | undefined }) {
@@ -230,7 +250,7 @@ function AgentCard({
         <div style={{ flex: 1, minWidth: 0 }}>
           <StatusBadge status={status} />
           <p style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginTop: 3, lineHeight: 1 }}>
-            {agent?.last_seen ? formatRelativeTime(agent.last_seen) : "no data"}
+            {agent?.last_seen ? formatRelativeTime(agent.last_seen) : ja.agent.noData}
           </p>
         </div>
         <StatusLamp agent={agent} />
@@ -283,60 +303,92 @@ function AgentCard({
 }
 
 // ── ActivityFeed ───────────────────────────────────────
-function ActivityFeed({ jobs }: { jobs: JobRow[] }) {
-  if (jobs.length === 0) {
+const EVENT_COLOR: Record<string, string> = {
+  job_started:   "#3b82f6",
+  job_completed: "#22c55e",
+};
+const EVENT_BADGE: Record<string, string> = {
+  job_started:   "STARTED",
+  job_completed: "DONE",
+};
+
+function buildFeed(jobs: JobRow[], events: JobEventRow[]): FeedItem[] {
+  const jobItems: FeedItem[] = jobs.map((j) => ({
+    kind: "job",
+    ts: j.started_at,
+    id: j._id,
+    agent_id: j.agent_id,
+    label: j.title,
+    badge: j.status.toUpperCase(),
+    color: JOB_STATUS_COLOR[j.status] ?? "#6b7280",
+  }));
+  const eventItems: FeedItem[] = events.map((e) => ({
+    kind: "event",
+    ts: e.created_at,
+    id: e._id,
+    agent_id: e.agent_id,
+    label: e.task,
+    badge: EVENT_BADGE[e.type] ?? e.type.toUpperCase(),
+    color: EVENT_COLOR[e.type] ?? "#6b7280",
+  }));
+  return [...jobItems, ...eventItems]
+    .sort((a, b) => b.ts - a.ts)
+    .slice(0, 10);
+}
+
+function ActivityFeed({ jobs, events }: { jobs: JobRow[]; events: JobEventRow[] }) {
+  const feed = buildFeed(jobs, events);
+
+  if (feed.length === 0) {
     return (
       <p style={{ fontSize: "0.875rem", color: "var(--text-muted)", padding: "1rem" }}>
-        No activity yet
+        {ja.feed.empty}
       </p>
     );
   }
 
   return (
     <div>
-      {jobs.map((job) => {
-        const dotColor = JOB_STATUS_COLOR[job.status] ?? "#6b7280";
-        return (
-          <div key={job._id} style={{
-            display: "flex", gap: "1rem", alignItems: "center",
-            padding: "0.5rem 1rem",
-            borderBottom: "1px solid var(--border)",
+      {feed.map((item) => (
+        <div key={item.id} style={{
+          display: "flex", gap: "1rem", alignItems: "center",
+          padding: "0.5rem 1rem",
+          borderBottom: "1px solid var(--border)",
+        }}>
+          {/* 時刻 */}
+          <span style={{
+            fontSize: "0.7rem", color: "var(--text-muted)",
+            width: 52, flexShrink: 0, textAlign: "right",
           }}>
-            {/* 時刻 */}
-            <span style={{
-              fontSize: "0.7rem", color: "var(--text-muted)",
-              width: 52, flexShrink: 0, textAlign: "right",
-            }}>
-              {formatRelativeTime(job.started_at)}
-            </span>
+            {formatRelativeTime(item.ts)}
+          </span>
 
-            {/* エージェント */}
-            <span style={{
-              fontSize: "0.72rem", fontFamily: "monospace", color: "var(--text-muted)",
-              width: 130, flexShrink: 0,
-              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-            }}>
-              {job.agent_id || "—"}
-            </span>
+          {/* エージェント */}
+          <span style={{
+            fontSize: "0.72rem", fontFamily: "monospace", color: "var(--text-muted)",
+            width: 130, flexShrink: 0,
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          }}>
+            {item.agent_id || "—"}
+          </span>
 
-            {/* タイトル */}
-            <span style={{
-              fontSize: "0.8rem", color: "var(--text)", flex: 1,
-              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-            }}>
-              {job.title}
-            </span>
+          {/* ラベル */}
+          <span style={{
+            fontSize: "0.8rem", color: "var(--text)", flex: 1,
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          }}>
+            {item.label}
+          </span>
 
-            {/* ステータスドット */}
-            <span style={{
-              fontSize: "0.65rem", fontWeight: 700,
-              color: dotColor, letterSpacing: "0.04em", flexShrink: 0,
-            }}>
-              {job.status.toUpperCase()}
-            </span>
-          </div>
-        );
-      })}
+          {/* バッジ */}
+          <span style={{
+            fontSize: "0.65rem", fontWeight: 700,
+            color: item.color, letterSpacing: "0.04em", flexShrink: 0,
+          }}>
+            {item.badge}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -393,23 +445,23 @@ function DetailPanel({
         <div style={{ padding: "1.25rem", flex: 1 }}>
 
           {/* STATUS */}
-          <SectionHeader>Status</SectionHeader>
+          <SectionHeader>{ja.status.running}</SectionHeader>
           {agent ? (
             <div style={{ marginBottom: "1.25rem" }}>
-              <DetailRow label="Last seen">{formatRelativeTime(agent.last_seen)}</DetailRow>
-              <DetailRow label="Task">{agent.current_task || "—"}</DetailRow>
-              <DetailRow label="Model">
-                <span style={{ fontFamily: "monospace" }}>{agent.current_model || "—"}</span>
+              <DetailRow label={ja.agent.lastSeen}>{formatRelativeTime(agent.last_seen)}</DetailRow>
+              <DetailRow label={ja.agent.task}>{agent.current_task || ja.common.noData}</DetailRow>
+              <DetailRow label={ja.agent.model}>
+                <span style={{ fontFamily: "monospace" }}>{agent.current_model || ja.common.noData}</span>
               </DetailRow>
             </div>
           ) : (
             <p style={{ fontSize: "0.875rem", color: "var(--text-muted)", marginBottom: "1.25rem" }}>
-              No heartbeat received yet
+              {ja.agent.noData}
             </p>
           )}
 
           {/* MODEL STATUS */}
-          <SectionHeader>Model Status</SectionHeader>
+          <SectionHeader>{ja.agent.model}</SectionHeader>
           {models.length === 0 ? (
             <p style={{ fontSize: "0.875rem", color: "var(--text-muted)", marginBottom: "1.25rem" }}>—</p>
           ) : (
@@ -442,7 +494,7 @@ function DetailPanel({
           )}
 
           {/* RECENT JOBS */}
-          <SectionHeader>Recent Jobs</SectionHeader>
+          <SectionHeader>{ja.job.historyTitle}</SectionHeader>
           <div style={{
             marginLeft: "-1.25rem", marginRight: "-1.25rem",
             borderTop: "1px solid var(--border)",
@@ -479,6 +531,107 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
   );
 }
 
+// ── JobHistory ────────────────────────────────────────
+type JobHistoryRow = {
+  _id: string;
+  job_id: string;
+  agent_id?: string;
+  task: string;
+  status: "started" | "completed" | "failed";
+  started_at: number;
+  completed_at?: number;
+  duration_ms?: number;
+};
+
+const JOB_HISTORY_STATUS_COLOR: Record<string, string> = {
+  started:   "#3b82f6",
+  completed: "#22c55e",
+  failed:    "#ef4444",
+};
+
+const JOB_HISTORY_STATUS_LABEL: Record<string, string> = {
+  started:   ja.job.started,
+  completed: ja.job.completed,
+  failed:    ja.job.failed,
+};
+
+function formatDuration(ms: number | undefined): string {
+  if (ms === undefined) return ja.common.noData;
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`;
+}
+
+function JobHistorySection() {
+  const history = useQuery(api.queries.getRecentJobHistory, { limit: 10 });
+
+  return (
+    <section style={{ marginTop: "2rem" }}>
+      <h2 style={{
+        fontSize: "0.75rem", fontWeight: 700, color: "var(--text-muted)",
+        textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.75rem",
+      }}>
+        {ja.job.historyTitle}
+      </h2>
+      <div style={{
+        backgroundColor: "var(--bg-card)",
+        border: "1px solid var(--border)",
+        borderRadius: "0.75rem",
+        overflow: "hidden",
+      }}>
+        {history === undefined ? (
+          <p style={{ padding: "1rem", fontSize: "0.875rem", color: "var(--text-muted)" }}>
+            {ja.common.loading}
+          </p>
+        ) : history.length === 0 ? (
+          <p style={{ padding: "1rem", fontSize: "0.875rem", color: "var(--text-muted)" }}>
+            {ja.job.noHistory}
+          </p>
+        ) : (
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                {[ja.job.task, "Agent", "ステータス", ja.job.duration, ja.job.startedAt].map((h) => (
+                  <th key={h} style={{
+                    padding: "0.5rem 1rem", textAlign: "left",
+                    fontSize: "0.7rem", fontWeight: 700,
+                    color: "var(--text-muted)", letterSpacing: "0.06em",
+                  }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(history as JobHistoryRow[]).map((row) => {
+                const color = JOB_HISTORY_STATUS_COLOR[row.status] ?? "#6b7280";
+                const label = JOB_HISTORY_STATUS_LABEL[row.status] ?? row.status;
+                return (
+                  <tr key={row._id} style={{ borderBottom: "1px solid var(--border)" }}>
+                    <td style={{ padding: "0.5rem 1rem", fontSize: "0.8rem", color: "var(--text)", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {row.task}
+                    </td>
+                    <td style={{ padding: "0.5rem 1rem", fontSize: "0.75rem", fontFamily: "monospace", color: "var(--text-muted)" }}>
+                      {row.agent_id || ja.common.noData}
+                    </td>
+                    <td style={{ padding: "0.5rem 1rem" }}>
+                      <span style={{ fontSize: "0.7rem", fontWeight: 700, color }}>{label}</span>
+                    </td>
+                    <td style={{ padding: "0.5rem 1rem", fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                      {formatDuration(row.duration_ms)}
+                    </td>
+                    <td style={{ padding: "0.5rem 1rem", fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                      {formatRelativeTime(row.started_at)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </section>
+  );
+}
+
 // ── DashboardPage ─────────────────────────────────────
 export default function DashboardPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -486,6 +639,7 @@ export default function DashboardPage() {
   const allAgents = useQuery(api.queries.getAllAgents);
   const allModels = useQuery(api.queries.getAllModelStatus);
   const recentJobs = useQuery(api.queries.getRecentJobs, { limit: 20 });
+  const recentJobEvents = useQuery(api.queries.getRecentJobEvents, { limit: 10 });
 
   // seed + DB のユニーク agent_id 一覧
   const dbIds    = (allAgents ?? []).map((a) => a.agent_id).filter((id) => !SEED_AGENTS.includes(id));
@@ -526,7 +680,7 @@ export default function DashboardPage() {
       <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem", marginBottom: "1.5rem" }}>
         <h1 style={{ fontSize: "1.25rem", fontWeight: 600 }}>Mission Control</h1>
         <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
-          {agentIds.length} agents · {activeCount} active
+          {agentIds.length} {ja.common.agents} · {activeCount} {ja.common.active}
         </span>
       </div>
 
@@ -555,7 +709,7 @@ export default function DashboardPage() {
           fontSize: "0.75rem", fontWeight: 700, color: "var(--text-muted)",
           textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.75rem",
         }}>
-          Recent Activity
+          {ja.feed.title}
         </h2>
         <div style={{
           backgroundColor: "var(--bg-card)",
@@ -563,13 +717,16 @@ export default function DashboardPage() {
           borderRadius: "0.75rem",
           overflow: "hidden",
         }}>
-          {recentJobs === undefined ? (
-            <p style={{ padding: "1rem", fontSize: "0.875rem", color: "var(--text-muted)" }}>Loading...</p>
+          {recentJobs === undefined || recentJobEvents === undefined ? (
+            <p style={{ padding: "1rem", fontSize: "0.875rem", color: "var(--text-muted)" }}>{ja.feed.loading}</p>
           ) : (
-            <ActivityFeed jobs={recentJobs as JobRow[]} />
+            <ActivityFeed jobs={recentJobs as JobRow[]} events={recentJobEvents as JobEventRow[]} />
           )}
         </div>
       </section>
+
+      {/* ── ジョブ履歴 ── */}
+      <JobHistorySection />
 
       {/* ── 詳細パネル ── */}
       {selectedId && (
