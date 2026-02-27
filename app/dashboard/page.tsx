@@ -216,12 +216,14 @@ function AgentCard({
   models,
   selected,
   onClick,
+  displayTask,
 }: {
   agentId: string;
   agent: AgentRow | undefined;
   models: ModelRow[];
   selected: boolean;
   onClick: () => void;
+  displayTask?: string;
 }) {
   const status  = getEffectiveStatus(agent);
   const isDown  = status === "down";
@@ -272,7 +274,7 @@ function AgentCard({
           fontSize: "0.75rem", color: "var(--text)",
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
         }}>
-          {agent?.current_task || "—"}
+          {displayTask || "—"}
         </span>
       </div>
 
@@ -406,6 +408,10 @@ function DetailPanel({
   onClose: () => void;
 }) {
   const status = getEffectiveStatus(agent);
+  const history = useQuery(api.queries.getJobHistoryForAgent, { agent_id: agentId, limit: 10 });
+  const latestStarted = history?.find((h) => h.status === "started");
+  const latestFinished = history?.find((h) => h.status === "completed" || h.status === "failed");
+  const activeTask = latestStarted?.task || (agent?.current_task && agent.current_task !== "monitoring" ? agent.current_task : "");
 
   return (
     <>
@@ -449,7 +455,9 @@ function DetailPanel({
           {agent ? (
             <div style={{ marginBottom: "1.25rem" }}>
               <DetailRow label={ja.agent.lastSeen}>{formatRelativeTime(agent.last_seen)}</DetailRow>
-              <DetailRow label={ja.agent.task}>{agent.current_task || ja.common.noData}</DetailRow>
+              <DetailRow label={ja.agent.task}>{activeTask || ja.common.noData}</DetailRow>
+              <DetailRow label="受付時刻">{formatClock(latestStarted?.started_at)}</DetailRow>
+              <DetailRow label="完了時刻">{formatClock(latestFinished?.completed_at)}</DetailRow>
               <DetailRow label={ja.agent.model}>
                 <span style={{ fontFamily: "monospace" }}>{agent.current_model || ja.common.noData}</span>
               </DetailRow>
@@ -505,6 +513,16 @@ function DetailPanel({
       </div>
     </>
   );
+}
+
+function formatClock(ms?: number): string {
+  if (!ms) return "—";
+  return new Date(ms).toLocaleTimeString("ja-JP", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Asia/Tokyo",
+  });
 }
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
@@ -673,6 +691,23 @@ export default function DashboardPage() {
   const selectedAgent  = selectedId ? agentMap.get(selectedId)  : undefined;
   const selectedModels = selectedId ? (modelMap.get(selectedId) ?? []) : [];
 
+  // 最新ジョブイベントを agent_id ごとに保持（実タスク表示用）
+  const latestEventByAgent = useMemo(() => {
+    const m = new Map<string, JobEventRow>();
+    for (const ev of recentJobEvents ?? []) {
+      if (!m.has(ev.agent_id)) m.set(ev.agent_id, ev);
+    }
+    return m;
+  }, [recentJobEvents]);
+
+  const resolveDisplayTask = (id: string, agent?: AgentRow) => {
+    const ev = latestEventByAgent.get(id);
+    if (ev?.type === "job_started") return ev.task;
+    const t = agent?.current_task?.trim();
+    if (!t || t === "monitoring") return "";
+    return t;
+  };
+
   return (
     <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
 
@@ -691,16 +726,20 @@ export default function DashboardPage() {
         gap: "0.875rem",
         marginBottom: "2rem",
       }}>
-        {agentIds.map((id) => (
-          <AgentCard
-            key={id}
-            agentId={id}
-            agent={agentMap.get(id)}
-            models={modelMap.get(id) ?? []}
-            selected={selectedId === id}
-            onClick={() => setSelectedId(selectedId === id ? null : id)}
-          />
-        ))}
+        {agentIds.map((id) => {
+          const agent = agentMap.get(id);
+          return (
+            <AgentCard
+              key={id}
+              agentId={id}
+              agent={agent}
+              models={modelMap.get(id) ?? []}
+              displayTask={resolveDisplayTask(id, agent)}
+              selected={selectedId === id}
+              onClick={() => setSelectedId(selectedId === id ? null : id)}
+            />
+          );
+        })}
       </div>
 
       {/* ── Recent Activity（横断タイムライン） ── */}
