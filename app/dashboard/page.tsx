@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { getEffectiveStatus } from "../components/AgentStatusCard";
@@ -653,11 +653,23 @@ function JobHistorySection() {
 // ── DashboardPage ─────────────────────────────────────
 export default function DashboardPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [liveTs, setLiveTs] = useState<number | null>(null);
 
   const allAgents = useQuery(api.queries.getAllAgents);
   const allModels = useQuery(api.queries.getAllModelStatus);
   const recentJobs = useQuery(api.queries.getRecentJobs, { limit: 20 });
   const recentJobEvents = useQuery(api.queries.getRecentJobEvents, { limit: 10 });
+
+  // M4: SSE購読（1秒以内の更新通知）
+  useEffect(() => {
+    const es = new EventSource('/api/events');
+    es.addEventListener('job', () => setLiveTs(Date.now()));
+    es.addEventListener('heartbeat', () => setLiveTs(Date.now()));
+    es.onerror = () => {
+      // reconnect handled by EventSource
+    };
+    return () => es.close();
+  }, []);
 
   // seed + DB のユニーク agent_id 一覧
   const dbIds    = (allAgents ?? []).map((a) => a.agent_id).filter((id) => !SEED_AGENTS.includes(id));
@@ -724,6 +736,9 @@ export default function DashboardPage() {
         <h1 style={{ fontSize: "1.25rem", fontWeight: 600 }}>Mission Control</h1>
         <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
           {agentIds.length} {ja.common.agents} · {activeCount} {ja.common.active}
+        </span>
+        <span style={{ fontSize: "0.75rem", color: "#22c55e" }}>
+          LIVE {liveTs ? `(${formatRelativeTime(liveTs)})` : "(connecting...)"}
         </span>
       </div>
 
