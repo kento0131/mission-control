@@ -1,3 +1,5 @@
+"use client";
+
 import { JobsTable } from "../components/JobsTable";
 import { ja } from "../../lib/i18n/ja";
 

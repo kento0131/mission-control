@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ja } from "../../lib/i18n/ja";
+import { ConvexDebugBanner } from "./ConvexDebugBanner";
 
 const links = [
   { href: "/dashboard", label: ja.nav.dashboard },
@@ -48,6 +49,9 @@ export function NavBar() {
           );
         })}
       </div>
+
+      {/* デバッグバナー: WS接続状態 + バンドル内URL を表示 */}
+      <ConvexDebugBanner />
     </nav>
   );
 }
