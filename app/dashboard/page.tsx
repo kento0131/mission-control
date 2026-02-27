@@ -9,7 +9,8 @@ import { formatRelativeTime, DOWN_THRESHOLD_MS } from "../../lib/utils";
 import { ja } from "../../lib/i18n/ja";
 
 // ── 定数 ──────────────────────────────────────────────
-const SEED_AGENTS = ["openclaw-main", "discord-bot", "calendar-worker"];
+// M5: 監視対象3サービス（OpenClaw / Discord bot / Claude Code）を統一表示
+const SEED_AGENTS = ["openclaw-main", "discord-bot", "claude-code"];
 
 /** 3状態ランプ: DOWN 判定と同じ閾値で揃える */
 const LAMP_OFFLINE_MS = DOWN_THRESHOLD_MS;
@@ -28,6 +29,7 @@ function getAvatarColor(id: string): string {
 function getAgentIcon(id: string): string {
   if (id.includes("openclaw") || id.includes("claw")) return "⚡";
   if (id.includes("discord"))  return "💬";
+  if (id.includes("claude"))   return "🧠";
   if (id.includes("calendar")) return "📅";
   if (id.includes("monitor"))  return "👁";
   if (id.includes("worker"))   return "⚙";

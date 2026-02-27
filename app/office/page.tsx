@@ -7,7 +7,8 @@ import { AgentDesk } from "./AgentDesk";
 import { getEffectiveStatus } from "../components/AgentStatusCard";
 import { formatRelativeTime, DOWN_THRESHOLD_MS } from "../../lib/utils";
 
-const SEED_AGENTS = ["openclaw-main", "discord-bot", "calendar-worker"];
+// M5: 監視対象3サービス（OpenClaw / Discord bot / Claude Code）を統一表示
+const SEED_AGENTS = ["openclaw-main", "discord-bot", "claude-code"];
 
 type AgentRow = {
   _id: string;
