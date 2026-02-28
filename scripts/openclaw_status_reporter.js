@@ -49,6 +49,10 @@ const CONVEX_SITE_URL =
   sanitizeAscii(process.env.CONVEX_SITE_URL) || "https://opulent-clam-873.convex.site";
 const INTERVAL_MS = Number(process.env.INTERVAL_SEC ?? 5) * 1000;
 const AGENT_ID    = sanitizeAscii(process.env.AGENT_ID) || "openclaw-main";
+const HEARTBEAT_ENABLED = String(process.env.HEARTBEAT_ENABLED ?? "true").toLowerCase() !== "false";
+const MODEL_STATUS_ENABLED = String(process.env.MODEL_STATUS_ENABLED ?? "true").toLowerCase() !== "false";
+const HEARTBEAT_STATUS = sanitizeAscii(process.env.HEARTBEAT_STATUS) || "running";
+const OPENCLAW_CMD = sanitizeAscii(process.env.OPENCLAW_CMD) || "openclaw";
 
 const secret = sanitizeAscii(process.env.OPENCLAW_SECRET);
 if (!secret) {
@@ -129,16 +133,20 @@ function parseOpenclawModelsStatus(text) {
 
 function runOpenclawModelsStatus() {
   try {
-    const raw = execSync("openclaw models status", {
-      timeout: 10_000,
+    const raw = execSync(`${OPENCLAW_CMD} models status`, {
+      timeout: 30_000,
       encoding: "utf8",
       stdio: ["pipe", "pipe", "pipe"],
     });
     return parseOpenclawModelsStatus(raw);
   } catch (err) {
-    const msg = err.stderr ?? err.message ?? "";
-    if (!msg.includes("not found") && !msg.includes("ENOENT")) {
-      console.error(`[reporter] openclaw models status failed: ${msg.slice(0, 200)}`);
+    const stderr = String(err?.stderr ?? "");
+    const msg = String(err?.message ?? "");
+    const status = err?.status ?? "?";
+    const signal = err?.signal ?? "";
+    const detail = `${msg} ${stderr}`.trim();
+    if (!detail.includes("not found") && !detail.includes("ENOENT")) {
+      console.error(`[reporter] openclaw models status failed: status=${status} signal=${signal} ${detail}`.slice(0, 400));
     }
     return null;
   }
@@ -181,13 +189,15 @@ async function report() {
   // current_task: 日本語対応のため sanitizeText を使用
   const currentTask = sanitizeText(process.env.CURRENT_TASK ?? "monitoring");
 
-  // heartbeat
-  await post("/api/openclaw/heartbeat", {
-    agent_id:      AGENT_ID,
-    status:        "running",
-    current_task:  currentTask,
-    current_model: currentModel,
-  });
+  // heartbeat (optional)
+  if (HEARTBEAT_ENABLED) {
+    await post("/api/openclaw/heartbeat", {
+      agent_id:      AGENT_ID,
+      status:        HEARTBEAT_STATUS,
+      current_task:  currentTask,
+      current_model: currentModel,
+    });
+  }
 
   // model_status の決定:
   //   1. openclaw コマンドで取得できた場合
@@ -202,6 +212,8 @@ async function report() {
   if (remainingDayPercent === null && process.env.REMAINING_DAY_PCT !== undefined) {
     remainingDayPercent = parseFloat(process.env.REMAINING_DAY_PCT);
   }
+
+  if (!MODEL_STATUS_ENABLED) return;
 
   if (remainingPercent !== null && !isNaN(remainingPercent)) {
     const payload = {
@@ -224,7 +236,7 @@ async function report() {
     );
   } else {
     console.log(
-      `[${new Date().toISOString()}] [${AGENT_ID}] heartbeat sent (model status unavailable)` +
+      `[${new Date().toISOString()}] [${AGENT_ID}] model status unavailable` +
       ` — set REMAINING_PERCENT=<0-100> env var to force model_status reporting`
     );
   }
@@ -253,6 +265,7 @@ process.on("SIGTERM", () => shutdown("SIGTERM"));
 // ── 起動 ──────────────────────────────────────────────
 console.log(`openclaw_status_reporter starting  agent=${AGENT_ID}  interval=${INTERVAL_MS / 1000}s`);
 console.log(`Endpoint: ${CONVEX_SITE_URL}`);
+console.log(`heartbeat=${HEARTBEAT_ENABLED ? HEARTBEAT_STATUS : "off"} model_status=${MODEL_STATUS_ENABLED ? "on" : "off"}`);
 console.log("Press Ctrl+C to stop.\n");
 
 report();
