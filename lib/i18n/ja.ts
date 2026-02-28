@@ -2,7 +2,7 @@ export const ja = {
   // ナビ
   nav: { dashboard: "ダッシュボード", office: "オフィス", jobs: "ジョブ", calendar: "カレンダー" },
   // ステータス
-  status: { running: "稼働中", idle: "待機中", stopped: "停止中", down: "オフライン" },
+  status: { running: "処理中", idle: "待機中", stopped: "停止中", down: "オフライン" },
   // ランプ
   lamp: { active: "作業中", idle: "待機中", offline: "オフライン" },
   // ジョブ
