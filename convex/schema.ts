@@ -13,7 +13,9 @@ export default defineSchema({
     current_task: v.optional(v.string()),
     current_model: v.optional(v.string()),
     last_seen: v.number(),
-  }).index("by_agent_id", ["agent_id"]),
+  })
+    .index("by_agent_id", ["agent_id"])
+    .index("by_last_seen", ["last_seen"]),
 
   // agent_id + model で 1 行
   model_status: defineTable({
@@ -23,7 +25,9 @@ export default defineSchema({
     remaining_day_percent: v.optional(v.number()),
     raw: v.optional(v.string()),
     updated_at: v.number(),
-  }).index("by_agent_id", ["agent_id"]),
+  })
+    .index("by_agent_id", ["agent_id"])
+    .index("by_updated_at", ["updated_at"]),
 
   jobs: defineTable({
     job_id: v.string(),
@@ -53,7 +57,9 @@ export default defineSchema({
       v.literal("debug")
     ),
     message: v.string(),
-  }).index("by_job_id_ts", ["job_id", "ts"]),
+  })
+    .index("by_job_id_ts", ["job_id", "ts"])
+    .index("by_ts", ["ts"]),
 
   // Discord bot → Mission Control ジョブイベント
   job_events: defineTable({

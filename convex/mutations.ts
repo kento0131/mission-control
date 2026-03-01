@@ -301,6 +301,68 @@ export const updateCalendarEventRun = internalMutation({
   },
 });
 
+export const cleanupOldData = internalMutation({
+  handler: async (ctx) => {
+    const now = Date.now();
+    const LOGS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+    const JOBS_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+    const EVENTS_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+    const AGENTS_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+    const MODEL_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+    const CALENDAR_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+    const BATCH = 500;
+
+    // logs: 7日以上前を削除
+    const oldLogs = await ctx.db
+      .query("logs")
+      .withIndex("by_ts", (q) => q.lt("ts", now - LOGS_TTL_MS))
+      .take(BATCH);
+    for (const doc of oldLogs) await ctx.db.delete(doc._id);
+
+    // jobs: 30日以上前は状態に関わらず削除（肥大化防止）
+    const oldJobs = await ctx.db
+      .query("jobs")
+      .withIndex("by_started_at", (q) => q.lt("started_at", now - JOBS_TTL_MS))
+      .take(BATCH);
+    for (const job of oldJobs) await ctx.db.delete(job._id);
+
+    // job_history: 30日以上前は削除
+    const oldHistory = await ctx.db
+      .query("job_history")
+      .withIndex("by_started_at", (q) => q.lt("started_at", now - JOBS_TTL_MS))
+      .take(BATCH);
+    for (const doc of oldHistory) await ctx.db.delete(doc._id);
+
+    // job_events: 30日以上前を削除
+    const oldEvents = await ctx.db
+      .query("job_events")
+      .withIndex("by_created_at", (q) => q.lt("created_at", now - EVENTS_TTL_MS))
+      .take(BATCH);
+    for (const doc of oldEvents) await ctx.db.delete(doc._id);
+
+    // agents: 14日以上 heartbeat がないものを削除
+    const oldAgents = await ctx.db
+      .query("agents")
+      .withIndex("by_last_seen", (q) => q.lt("last_seen", now - AGENTS_TTL_MS))
+      .take(BATCH);
+    for (const doc of oldAgents) await ctx.db.delete(doc._id);
+
+    // model_status: 14日以上更新がないものを削除
+    const oldModels = await ctx.db
+      .query("model_status")
+      .withIndex("by_updated_at", (q) => q.lt("updated_at", now - MODEL_TTL_MS))
+      .take(BATCH);
+    for (const doc of oldModels) await ctx.db.delete(doc._id);
+
+    // calendar_events: 90日以上前に終わった/開始したイベントを削除
+    const oldCalendar = await ctx.db
+      .query("calendar_events")
+      .withIndex("by_start_at", (q) => q.lt("start_at", now - CALENDAR_TTL_MS))
+      .take(BATCH);
+    for (const doc of oldCalendar) await ctx.db.delete(doc._id);
+  },
+});
+
 export const appendLog = internalMutation({
   args: {
     job_id: v.string(),

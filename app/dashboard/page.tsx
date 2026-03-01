@@ -337,6 +337,12 @@ function buildFeed(jobs: JobRow[], events: JobEventRow[]): FeedItem[] {
     if (j.finished_at > prev) latestFinishedAtByAgent.set(j.agent_id, j.finished_at);
   }
 
+  const latestEventAtByAgent = new Map<string, number>();
+  for (const e of events) {
+    const prev = latestEventAtByAgent.get(e.agent_id) ?? 0;
+    if (e.created_at > prev) latestEventAtByAgent.set(e.agent_id, e.created_at);
+  }
+
   const jobItems: FeedItem[] = jobs.map((j) => ({
     kind: "job",
     ts: j.finished_at ?? j.started_at,
@@ -348,7 +354,10 @@ function buildFeed(jobs: JobRow[], events: JobEventRow[]): FeedItem[] {
   }));
   const eventItems: FeedItem[] = events.map((e) => {
     const latestDone = latestFinishedAtByAgent.get(e.agent_id) ?? 0;
-    const shouldMarkDone = e.type === "job_started" && latestDone >= e.created_at;
+    const latestEvent = latestEventAtByAgent.get(e.agent_id) ?? 0;
+    // started が後続イベントで上書きされていれば完了扱いに寄せる
+    const shouldMarkDone =
+      e.type === "job_started" && (latestDone >= e.created_at || latestEvent > e.created_at);
     return {
       kind: "event" as const,
       ts: e.created_at,
