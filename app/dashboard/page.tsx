@@ -330,6 +330,13 @@ const EVENT_BADGE: Record<string, string> = {
 };
 
 function buildFeed(jobs: JobRow[], events: JobEventRow[]): FeedItem[] {
+  const latestFinishedAtByAgent = new Map<string, number>();
+  for (const j of jobs) {
+    if (!j.agent_id || !j.finished_at) continue;
+    const prev = latestFinishedAtByAgent.get(j.agent_id) ?? 0;
+    if (j.finished_at > prev) latestFinishedAtByAgent.set(j.agent_id, j.finished_at);
+  }
+
   const jobItems: FeedItem[] = jobs.map((j) => ({
     kind: "job",
     ts: j.finished_at ?? j.started_at,
@@ -339,15 +346,19 @@ function buildFeed(jobs: JobRow[], events: JobEventRow[]): FeedItem[] {
     badge: getJobBadge(j),
     color: getJobColor(j),
   }));
-  const eventItems: FeedItem[] = events.map((e) => ({
-    kind: "event",
-    ts: e.created_at,
-    id: e._id,
-    agent_id: e.agent_id,
-    label: e.task,
-    badge: EVENT_BADGE[e.type] ?? e.type.toUpperCase(),
-    color: EVENT_COLOR[e.type] ?? "#6b7280",
-  }));
+  const eventItems: FeedItem[] = events.map((e) => {
+    const latestDone = latestFinishedAtByAgent.get(e.agent_id) ?? 0;
+    const shouldMarkDone = e.type === "job_started" && latestDone >= e.created_at;
+    return {
+      kind: "event" as const,
+      ts: e.created_at,
+      id: e._id,
+      agent_id: e.agent_id,
+      label: e.task,
+      badge: shouldMarkDone ? "DONE" : (EVENT_BADGE[e.type] ?? e.type.toUpperCase()),
+      color: shouldMarkDone ? "#22c55e" : (EVENT_COLOR[e.type] ?? "#6b7280"),
+    };
+  });
   return [...jobItems, ...eventItems]
     .sort((a, b) => b.ts - a.ts)
     .slice(0, 10);
