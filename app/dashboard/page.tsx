@@ -52,6 +52,18 @@ const JOB_STATUS_COLOR: Record<string, string> = {
   failed:  "#ef4444",
 };
 
+function getJobBadge(job: JobRow): string {
+  if (job.status === "success") return "DONE";
+  if (job.status === "failed") return "FAILED";
+  if (job.status === "running" && job.finished_at) return "DONE"; // stale status fallback
+  return job.status.toUpperCase();
+}
+
+function getJobColor(job: JobRow): string {
+  if (job.status === "running" && job.finished_at) return "#4ade80";
+  return JOB_STATUS_COLOR[job.status] ?? "#6b7280";
+}
+
 // ── 型 ────────────────────────────────────────────────
 type AgentRow = {
   _id: string;
@@ -320,12 +332,12 @@ const EVENT_BADGE: Record<string, string> = {
 function buildFeed(jobs: JobRow[], events: JobEventRow[]): FeedItem[] {
   const jobItems: FeedItem[] = jobs.map((j) => ({
     kind: "job",
-    ts: j.started_at,
+    ts: j.finished_at ?? j.started_at,
     id: j._id,
     agent_id: j.agent_id,
     label: j.title,
-    badge: j.status.toUpperCase(),
-    color: JOB_STATUS_COLOR[j.status] ?? "#6b7280",
+    badge: getJobBadge(j),
+    color: getJobColor(j),
   }));
   const eventItems: FeedItem[] = events.map((e) => ({
     kind: "event",
@@ -657,6 +669,9 @@ function JobHistorySection() {
 export default function DashboardPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [liveTs, setLiveTs] = useState<number | null>(null);
+  const [refreshingModel, setRefreshingModel] = useState(false);
+  const [manualOpenclawModel, setManualOpenclawModel] = useState<{ model: string; remaining_percent: number; remaining_day_percent?: number; updated_at: number } | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
 
   const allAgents = useQuery(api.queries.getAllAgents);
   const allModels = useQuery(api.queries.getAllModelStatus);
@@ -673,6 +688,34 @@ export default function DashboardPage() {
     };
     return () => es.close();
   }, []);
+
+  const refreshUsageNow = async () => {
+    setRefreshingModel(true);
+    setRefreshError(null);
+    try {
+      const res = await fetch('/api/model-refresh', { method: 'POST' });
+      const data = await res.json();
+      if (!data?.ok) {
+        if (data?.unsupported) {
+          setRefreshError('この環境では手動更新に未対応です（OpenClaw実行環境が必要）。');
+        } else {
+          setRefreshError('手動更新に失敗しました。');
+        }
+        return;
+      }
+      setManualOpenclawModel({
+        model: data.model,
+        remaining_percent: data.remaining_percent,
+        remaining_day_percent: data.remaining_day_percent ?? undefined,
+        updated_at: data.ts ?? Date.now(),
+      });
+      setLiveTs(Date.now());
+    } catch {
+      setRefreshError('手動更新に失敗しました。');
+    } finally {
+      setRefreshingModel(false);
+    }
+  };
 
   // seed + DB のユニーク agent_id 一覧
   // 表示対象は固定seed + sub-agent* のみ（test系や旧agentは非表示）
@@ -694,6 +737,22 @@ export default function DashboardPage() {
       if (!m.has(row.agent_id)) m.set(row.agent_id, []);
       m.get(row.agent_id)!.push(row as ModelRow);
     }
+
+    // 手動更新値があれば openclaw-main の先頭にオーバーライドとして積む
+    if (manualOpenclawModel) {
+      const rows = m.get("openclaw-main") ?? [];
+      rows.unshift({
+        _id: "manual-openclaw-main",
+        agent_id: "openclaw-main",
+        model: manualOpenclawModel.model,
+        remaining_percent: manualOpenclawModel.remaining_percent,
+        remaining_day_percent: manualOpenclawModel.remaining_day_percent,
+        raw: "manual refresh",
+        updated_at: manualOpenclawModel.updated_at,
+      });
+      m.set("openclaw-main", rows);
+    }
+
     for (const [agentId, rows] of m.entries()) {
       rows.sort((a, b) => b.updated_at - a.updated_at);
       const seen = new Set<string>();
@@ -706,7 +765,7 @@ export default function DashboardPage() {
       m.set(agentId, deduped);
     }
     return m;
-  }, [allModels]);
+  }, [allModels, manualOpenclawModel]);
 
   // アクティブ数
   const activeCount = (allAgents ?? []).filter((a) => {
@@ -738,7 +797,7 @@ export default function DashboardPage() {
     <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
 
       {/* ヘッダー */}
-      <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem", marginBottom: "1.5rem" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1.5rem", flexWrap: "wrap" }}>
         <h1 style={{ fontSize: "1.25rem", fontWeight: 600 }}>Mission Control</h1>
         <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
           {agentIds.length} {ja.common.agents} · {activeCount} {ja.common.active}
@@ -746,7 +805,27 @@ export default function DashboardPage() {
         <span style={{ fontSize: "0.75rem", color: "#22c55e" }}>
           LIVE {liveTs ? `(${formatRelativeTime(liveTs)})` : "(connecting...)"}
         </span>
+        <button
+          onClick={refreshUsageNow}
+          disabled={refreshingModel}
+          style={{
+            marginLeft: "auto",
+            fontSize: "0.75rem",
+            padding: "0.35rem 0.6rem",
+            borderRadius: 8,
+            border: "1px solid var(--border)",
+            background: "var(--bg-card)",
+            color: "var(--text)",
+            cursor: refreshingModel ? "default" : "pointer",
+            opacity: refreshingModel ? 0.6 : 1,
+          }}
+        >
+          {refreshingModel ? "更新中..." : "↻ 残量を更新"}
+        </button>
       </div>
+      {refreshError && (
+        <p style={{ marginTop: "-1rem", marginBottom: "1rem", fontSize: "0.75rem", color: "#eab308" }}>{refreshError}</p>
+      )}
 
       {/* ── エージェントグリッド ── */}
       <div style={{
