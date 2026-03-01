@@ -37,6 +37,24 @@ function statusFromAge(ageMs: number): "running" | "idle" | "stale" {
 }
 
 export async function GET() {
+  const remoteSourceUrl = process.env.SUBAGENTS_SOURCE_URL;
+  if (remoteSourceUrl) {
+    try {
+      const res = await fetch(remoteSourceUrl, {
+        headers: process.env.SUBAGENTS_SOURCE_TOKEN
+          ? { Authorization: `Bearer ${process.env.SUBAGENTS_SOURCE_TOKEN}` }
+          : undefined,
+        cache: "no-store",
+      });
+      if (res.ok) {
+        const remote = await res.json();
+        return Response.json({ ...remote, source: "remote" });
+      }
+    } catch {
+      // fallback to local-openclaw
+    }
+  }
+
   try {
     const { stdout } = await execFileAsync("openclaw", ["sessions", "--json", "--all-agents", "--active", "240"], {
       timeout: 10_000,
@@ -62,9 +80,26 @@ export async function GET() {
       })
       .sort((a, b) => a.ageMs - b.ageMs);
 
-    return Response.json({ ts: Date.now(), count: items.length, items });
-  } catch (error) {
+    return Response.json({ ts: Date.now(), count: items.length, items, source: "local-openclaw" });
+  } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    return Response.json({ ts: Date.now(), count: 0, items: [], error: message }, { status: 200 });
+    const code = typeof error === "object" && error && "code" in error ? String((error as { code?: string }).code) : "";
+
+    // Vercel/Serverless 環境では openclaw バイナリが存在しないため、機能非対応として返す
+    if (code === "ENOENT" || /spawn\s+openclaw\s+ENOENT/i.test(message)) {
+      return Response.json(
+        {
+          ts: Date.now(),
+          count: 0,
+          items: [],
+          unsupported: true,
+          reason: "Subagent monitor requires an OpenClaw-installed host runtime.",
+          source: "none",
+        },
+        { status: 200 }
+      );
+    }
+
+    return Response.json({ ts: Date.now(), count: 0, items: [], error: "subagent source unavailable", detail: message, source: "error" }, { status: 200 });
   }
 }

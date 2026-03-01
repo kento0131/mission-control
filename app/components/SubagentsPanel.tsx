@@ -18,6 +18,9 @@ type SubagentResponse = {
   count: number;
   items: SubagentItem[];
   error?: string;
+  unsupported?: boolean;
+  reason?: string;
+  source?: string;
 };
 
 function fmtAge(ms: number): string {
@@ -74,6 +77,9 @@ export function SubagentsPanel() {
         }}
       >
         Subagents
+        <span style={{ marginLeft: "0.5rem", fontSize: "0.68rem", fontWeight: 500, color: "var(--text-muted)", textTransform: "none" }}>
+          {data?.source ? `(source: ${data.source})` : ""}
+        </span>
       </h2>
 
       <div
@@ -123,7 +129,11 @@ export function SubagentsPanel() {
           </div>
         ) : (
           <p style={{ padding: "1rem", fontSize: "0.875rem", color: "var(--text-muted)" }}>
-            {data?.error ? `No subagents (${data.error})` : "No active subagents"}
+            {data?.unsupported
+              ? "Subagent monitor is unavailable on this deployment target (requires OpenClaw host runtime)."
+              : data?.error
+              ? "Subagent monitor temporarily unavailable."
+              : "No active subagents"}
           </p>
         )}
       </div>
