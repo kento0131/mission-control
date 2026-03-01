@@ -1,8 +1,45 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { formatRelativeTime } from "../../lib/utils";
+
+const MODEL_STATUS_UPDATE_INTERVAL_MS = 15_000;
+
+function NextModelUpdateText({ updatedAt }: { updatedAt: number }) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const nextAt = updatedAt + MODEL_STATUS_UPDATE_INTERVAL_MS;
+  const remainingSec = Math.max(0, Math.ceil((nextAt - now) / 1000));
+
+  if (remainingSec <= 10) {
+    return (
+      <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "monospace" }}>
+        次回更新まで: {remainingSec}s
+      </span>
+    );
+  }
+
+  const nextAtText = new Date(nextAt).toLocaleTimeString("ja-JP", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    timeZone: "Asia/Tokyo",
+  });
+
+  return (
+    <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "monospace" }}>
+      次回更新目安: {nextAtText}
+    </span>
+  );
+}
 
 function PercentBar({ label, value }: { label: string; value: number }) {
   const color = value > 20 ? "var(--green)" : value > 5 ? "var(--yellow)" : "var(--red)";
@@ -52,13 +89,16 @@ export function ModelStatusCard({ agentId = "openclaw-main" }: { agentId?: strin
               }}>
                 {m.model}
               </p>
-              <PercentBar label="Usage remaining" value={m.remaining_percent} />
+              <PercentBar label="5時間枠の残り" value={m.remaining_percent} />
               {m.remaining_day_percent !== undefined && (
-                <PercentBar label="Day remaining" value={m.remaining_day_percent} />
+                <PercentBar label="制限回復まであと（24時間枠）" value={m.remaining_day_percent} />
               )}
-              <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
-                Updated {formatRelativeTime(m.updated_at)}
-              </span>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
+                  Updated {formatRelativeTime(m.updated_at)}
+                </span>
+                <NextModelUpdateText updatedAt={m.updated_at} />
+              </div>
             </div>
           ))}
         </div>

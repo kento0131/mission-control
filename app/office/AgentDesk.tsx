@@ -253,9 +253,9 @@ export function AgentDesk({
         <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 3, marginTop: -4 }}>
           {models.slice(0, 1).map((m) => (
             <div key={m._id}>
-              <MiniPercent label="Usage" value={m.remaining_percent} />
+              <MiniPercent label="5時間枠" value={m.remaining_percent} />
               {m.remaining_day_percent !== undefined && (
-                <MiniPercent label="Day" value={m.remaining_day_percent} />
+                <MiniPercent label="24時間枠" value={m.remaining_day_percent} />
               )}
             </div>
           ))}

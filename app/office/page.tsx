@@ -114,9 +114,9 @@ function DetailPanel({
                 <p style={{ fontFamily: "monospace", fontSize: "0.875rem", marginBottom: "0.5rem" }}>
                   {m.model}
                 </p>
-                <MiniBar label="Usage（セッション残量）" value={m.remaining_percent} />
+                <MiniBar label="5時間枠の残り" value={m.remaining_percent} />
                 {m.remaining_day_percent !== undefined && (
-                  <MiniBar label="Day（本日残量）" value={m.remaining_day_percent} />
+                  <MiniBar label="制限回復まであと（24時間枠）" value={m.remaining_day_percent} />
                 )}
                 {m.raw && (
                   <details

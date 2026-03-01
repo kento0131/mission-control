@@ -362,9 +362,9 @@ function AgentCard({
       {/* resource bars */}
       {topModel ? (
         <>
-          <MiniBar label="Usage（セッション残量）" value={topModel.remaining_percent} />
+          <MiniBar label="5時間枠の残り" value={topModel.remaining_percent} />
           {topModel.remaining_day_percent !== undefined && (
-            <MiniBar label="Day（本日残量）" value={topModel.remaining_day_percent} />
+            <MiniBar label="制限回復まであと（24時間枠）" value={topModel.remaining_day_percent} />
           )}
           <div style={{ marginTop: 2 }}>
             <NextModelUpdateText updatedAt={topModel.updated_at} />
@@ -570,9 +570,9 @@ function DetailPanel({
               {models.map((m) => (
                 <div key={m._id} style={{ marginBottom: "1rem" }}>
                   <p style={{ fontFamily: "monospace", fontSize: "0.875rem", marginBottom: "0.5rem" }}>{m.model}</p>
-                  <FullBar label="Usage（セッション残量）" value={m.remaining_percent} />
+                  <FullBar label="5時間枠の残り" value={m.remaining_percent} />
                   {m.remaining_day_percent !== undefined && (
-                    <FullBar label="Day（本日残量）" value={m.remaining_day_percent} />
+                    <FullBar label="制限回復まであと（24時間枠）" value={m.remaining_day_percent} />
                   )}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4, gap: 8 }}>
                     <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", margin: 0 }}>
