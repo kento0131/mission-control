@@ -102,7 +102,8 @@ function parseOpenclawModelsStatus(text) {
   }
 
   // remaining_percent (複数パターン)
-  const usageMatch = text.match(/usage:\s*(\d+(?:\.\d+)?)%\s*left/i);
+  // e.g. "usage: 5h 97% left" / "usage: 97% left"
+  const usageMatch = text.match(/usage:[^\n]*?(\d+(?:\.\d+)?)%\s*left/i);
   if (usageMatch) result.remaining_percent = parseFloat(usageMatch[1]);
 
   if (result.remaining_percent === null) {

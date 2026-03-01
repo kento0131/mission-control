@@ -10,8 +10,8 @@ import { formatRelativeTime, DOWN_THRESHOLD_MS } from "../../lib/utils";
 import { ja } from "../../lib/i18n/ja";
 
 // ── 定数 ──────────────────────────────────────────────
-// M5: 監視対象3サービス（OpenClaw / Discord bot / Claude Code）を統一表示
-const SEED_AGENTS = ["openclaw-main", "discord-bot", "claude-code"];
+// 固定表示エージェント（要望反映）
+const SEED_AGENTS = ["openclaw-main", "claude-code", "sub-agent1", "sub-agent2", "sub-agent3"];
 
 /** 3状態ランプ: DOWN 判定と同じ閾値で揃える */
 const LAMP_OFFLINE_MS = DOWN_THRESHOLD_MS;
@@ -675,7 +675,10 @@ export default function DashboardPage() {
   }, []);
 
   // seed + DB のユニーク agent_id 一覧
-  const dbIds    = (allAgents ?? []).map((a) => a.agent_id).filter((id) => !SEED_AGENTS.includes(id));
+  // 表示対象は固定seed + sub-agent* のみ（test系や旧agentは非表示）
+  const dbIds = (allAgents ?? [])
+    .map((a) => a.agent_id)
+    .filter((id) => id.startsWith("sub-agent") && !SEED_AGENTS.includes(id));
   const agentIds = [...SEED_AGENTS, ...dbIds];
 
   // agent_id → AgentRow

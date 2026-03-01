@@ -22,8 +22,18 @@ while true; do
   MODEL=$(printf '%s\n' "$CLEAN" | sed -n 's/^Default[[:space:]]*:[[:space:]]*//p' | head -n1)
   [[ -z "$MODEL" ]] && MODEL="openai-codex/gpt-5.3-codex"
 
-  REMAIN=$(printf '%s\n' "$CLEAN" | sed -n 's/.*usage:.* \([0-9][0-9]*\)%[[:space:]]*left.*/\1/p' | head -n1)
-  DAY=$(printf '%s\n' "$CLEAN" | sed -n 's/.*Day[[:space:]]*\([0-9][0-9]*\)%[[:space:]]*left.*/\1/p' | head -n1)
+  # usage/day を Python regex で安定抽出
+  PARSED=$(python3 - "$CLEAN" <<'PY'
+import re, sys
+text = sys.argv[1]
+m_usage = re.search(r'usage:\s*(?:\d+h\s*)?(\d+(?:\.\d+)?)%\s*left', text, re.I)
+m_day = re.search(r'Day\s+(\d+(?:\.\d+)?)%\s*left', text, re.I)
+print((m_usage.group(1) if m_usage else "") + "\t" + (m_day.group(1) if m_day else ""))
+PY
+)
+  REMAIN="${PARSED%%$'\t'*}"
+  DAY="${PARSED#*$'\t'}"
+  [[ "$DAY" == "$PARSED" ]] && DAY=""
 
   if [[ -n "$REMAIN" ]]; then
     if [[ -n "$DAY" ]]; then

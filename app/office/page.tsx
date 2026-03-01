@@ -7,8 +7,8 @@ import { AgentDesk } from "./AgentDesk";
 import { getEffectiveStatus } from "../components/AgentStatusCard";
 import { formatRelativeTime, DOWN_THRESHOLD_MS } from "../../lib/utils";
 
-// M5: 監視対象3サービス（OpenClaw / Discord bot / Claude Code）を統一表示
-const SEED_AGENTS = ["openclaw-main", "discord-bot", "claude-code"];
+// 固定表示エージェント（要望反映）
+const SEED_AGENTS = ["openclaw-main", "claude-code", "sub-agent1", "sub-agent2", "sub-agent3"];
 
 type AgentRow = {
   _id: string;
@@ -200,8 +200,11 @@ export default function OfficePage() {
   const allAgents = useQuery(api.queries.getAllAgents);
 
   // seed + DB のユニーク一覧を構築
+  // 表示対象は固定seed + sub-agent* のみ（test系や旧agentは非表示）
   const dbMap = new Map((allAgents ?? []).map((a) => [a.agent_id, a]));
-  const dbIds = (allAgents ?? []).map((a) => a.agent_id).filter((id) => !SEED_AGENTS.includes(id));
+  const dbIds = (allAgents ?? [])
+    .map((a) => a.agent_id)
+    .filter((id) => id.startsWith("sub-agent") && !SEED_AGENTS.includes(id));
   const allIds = [...SEED_AGENTS, ...dbIds];
 
   const selectedAgent = selectedId ? dbMap.get(selectedId) ?? null : null;
