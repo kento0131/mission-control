@@ -11,10 +11,11 @@ import { ja } from "../../lib/i18n/ja";
 
 // ── 定数 ──────────────────────────────────────────────
 // 固定表示エージェント（要望反映）
-const SEED_AGENTS = ["openclaw-main", "claude-code", "sub-agent1", "sub-agent2", "sub-agent3"];
+const SEED_AGENTS = ["openclaw-main", "claude-code", "coding-agent", "designer", "debugger"];
 
 /** 3状態ランプ: DOWN 判定と同じ閾値で揃える */
 const LAMP_OFFLINE_MS = DOWN_THRESHOLD_MS;
+const MODEL_STATUS_UPDATE_INTERVAL_MS = 15_000;
 
 const AVATAR_PALETTE = [
   "#6366f1", "#ec4899", "#f59e0b", "#10b981",
@@ -186,6 +187,43 @@ function StatusLamp({ agent }: { agent: AgentRow | undefined }) {
   );
 }
 
+function NextModelUpdateText({ updatedAt }: { updatedAt?: number }) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!updatedAt) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [updatedAt]);
+
+  if (!updatedAt) return null;
+
+  const nextAt = updatedAt + MODEL_STATUS_UPDATE_INTERVAL_MS;
+  const remainingSec = Math.max(0, Math.ceil((nextAt - now) / 1000));
+
+  if (remainingSec <= 10) {
+    return (
+      <span style={{ fontSize: "0.66rem", color: "var(--text-muted)", fontFamily: "monospace" }}>
+        次回更新まで: {remainingSec}s
+      </span>
+    );
+  }
+
+  const nextAtText = new Date(nextAt).toLocaleTimeString("ja-JP", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    timeZone: "Asia/Tokyo",
+  });
+
+  return (
+    <span style={{ fontSize: "0.66rem", color: "var(--text-muted)", fontFamily: "monospace" }}>
+      次回更新目安: {nextAtText}
+    </span>
+  );
+}
+
 function MiniBar({ label, value }: { label: string; value: number }) {
   const color = value > 20 ? "#22c55e" : value > 5 ? "#eab308" : "#ef4444";
   return (
@@ -232,6 +270,7 @@ function AgentCard({
   selected,
   onClick,
   displayTask,
+  runningSubagents,
 }: {
   agentId: string;
   agent: AgentRow | undefined;
@@ -239,10 +278,14 @@ function AgentCard({
   selected: boolean;
   onClick: () => void;
   displayTask?: string;
+  runningSubagents: number;
 }) {
   const status  = getEffectiveStatus(agent);
   const isDown  = status === "down";
   const topModel = models[0];
+  const isSubagent = agentId.startsWith("sub-agent");
+  const shortTask = (displayTask || "").trim();
+  const taskText = shortTask ? (shortTask.length > 28 ? `${shortTask.slice(0, 28)}…` : shortTask) : "待機中";
 
   return (
     <div
@@ -282,6 +325,18 @@ function AgentCard({
         {agentId}
       </p>
 
+      {isSubagent && (
+        <p style={{
+          marginBottom: "0.4rem",
+          fontSize: "0.68rem",
+          fontWeight: 700,
+          letterSpacing: "0.04em",
+          color: "#93c5fd",
+        }}>
+          実行中 {runningSubagents}/3
+        </p>
+      )}
+
       {/* task */}
       <div style={{ display: "flex", gap: 4, alignItems: "baseline", marginBottom: 2 }}>
         <span style={{ fontSize: "0.65rem", color: "var(--text-muted)", flexShrink: 0 }}>▶</span>
@@ -289,7 +344,7 @@ function AgentCard({
           fontSize: "0.75rem", color: "var(--text)",
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
         }}>
-          {displayTask || "—"}
+          {taskText}
         </span>
       </div>
 
@@ -311,6 +366,9 @@ function AgentCard({
           {topModel.remaining_day_percent !== undefined && (
             <MiniBar label="Day（本日残量）" value={topModel.remaining_day_percent} />
           )}
+          <div style={{ marginTop: 2 }}>
+            <NextModelUpdateText updatedAt={topModel.updated_at} />
+          </div>
         </>
       ) : (
         <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>—</span>
@@ -516,9 +574,12 @@ function DetailPanel({
                   {m.remaining_day_percent !== undefined && (
                     <FullBar label="Day（本日残量）" value={m.remaining_day_percent} />
                   )}
-                  <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: 4 }}>
-                    Updated {formatRelativeTime(m.updated_at)}
-                  </p>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4, gap: 8 }}>
+                    <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", margin: 0 }}>
+                      Updated {formatRelativeTime(m.updated_at)}
+                    </p>
+                    <NextModelUpdateText updatedAt={m.updated_at} />
+                  </div>
                   {m.raw && (
                     <details style={{ marginTop: "0.5rem" }}>
                       <summary style={{ fontSize: "0.7rem", color: "var(--text-muted)", cursor: "pointer" }}>
@@ -796,6 +857,14 @@ export default function DashboardPage() {
   const selectedAgent  = selectedId ? agentMap.get(selectedId)  : undefined;
   const selectedModels = selectedId ? (modelMap.get(selectedId) ?? []) : [];
 
+  const runningSubagents = agentIds
+    .filter((id) => id.startsWith("sub-agent"))
+    .filter((id) => {
+      const a = agentMap.get(id);
+      if (!a) return false;
+      return getEffectiveStatus(a) === "running";
+    }).length;
+
   // 最新ジョブイベントを agent_id ごとに保持（実タスク表示用）
   const latestEventByAgent = useMemo(() => {
     const m = new Map<string, JobEventRow>();
@@ -863,6 +932,7 @@ export default function DashboardPage() {
               agent={agent}
               models={modelMap.get(id) ?? []}
               displayTask={resolveDisplayTask(id, agent)}
+              runningSubagents={runningSubagents}
               selected={selectedId === id}
               onClick={() => setSelectedId(selectedId === id ? null : id)}
             />

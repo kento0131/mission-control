@@ -17,6 +17,17 @@ type SessionRow = {
   label?: string;
 };
 
+type HeartbeatStatus = "running" | "idle" | "stopped";
+
+type HeartbeatPayload = {
+  agent_id: string;
+  status: HeartbeatStatus;
+  current_task?: string;
+  current_model?: string;
+};
+
+const SUB_AGENT_IDS = ["coding-agent", "designer", "debugger"] as const;
+
 const SUBAGENT_KINDS = new Set(["subagent", "sub-agent", "session", "run"]);
 
 function isLikelySubagent(session: SessionRow): boolean {
@@ -36,6 +47,90 @@ function statusFromAge(ageMs: number): "running" | "idle" | "stale" {
   return "stale";
 }
 
+function convexSiteUrlFromEnv(): string | null {
+  const direct = process.env.CONVEX_SITE_URL || process.env.NEXT_PUBLIC_CONVEX_SITE_URL;
+  if (direct) return direct.replace(/\/$/, "");
+
+  const cloud = process.env.NEXT_PUBLIC_CONVEX_URL || process.env.CONVEX_URL;
+  if (!cloud) return null;
+
+  try {
+    const u = new URL(cloud);
+    if (u.hostname.endsWith(".convex.cloud")) {
+      u.hostname = u.hostname.replace(/\.convex\.cloud$/, ".convex.site");
+    }
+    u.pathname = "";
+    u.search = "";
+    u.hash = "";
+    return u.toString().replace(/\/$/, "");
+  } catch {
+    return null;
+  }
+}
+
+async function sendHeartbeat(baseUrl: string, secret: string, payload: HeartbeatPayload): Promise<void> {
+  await fetch(`${baseUrl}/api/openclaw/heartbeat`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${secret}`,
+      "Content-Type": "application/json; charset=utf-8",
+    },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
+}
+
+async function syncSubagentHeartbeats(sessions: SessionRow[]): Promise<void> {
+  const secret = process.env.OPENCLAW_SECRET;
+  const siteUrl = convexSiteUrlFromEnv();
+  if (!secret || !siteUrl) return;
+
+  const runningSessions = sessions
+    .map((s) => {
+      const ageMs = s.ageMs ?? (s.updatedAt ? Date.now() - s.updatedAt : Number.MAX_SAFE_INTEGER);
+      return { ...s, ageMs, status: statusFromAge(ageMs) };
+    })
+    .filter((s) => s.status === "running")
+    .sort((a, b) => a.ageMs - b.ageMs);
+
+  const tasks = SUB_AGENT_IDS.map((agentId, idx) => {
+    const hit = runningSessions[idx];
+    if (!hit) {
+      return sendHeartbeat(siteUrl, secret, {
+        agent_id: agentId,
+        status: "idle",
+        current_task: "",
+      });
+    }
+
+    const task = (hit.label || hit.key || hit.sessionId || "subagent run").slice(0, 200);
+    return sendHeartbeat(siteUrl, secret, {
+      agent_id: agentId,
+      status: "running",
+      current_task: task,
+      current_model: hit.model || undefined,
+    });
+  });
+
+  await Promise.allSettled(tasks);
+}
+
+async function markSubagentsIdle(_reason = "待機中"): Promise<void> {
+  const secret = process.env.OPENCLAW_SECRET;
+  const siteUrl = convexSiteUrlFromEnv();
+  if (!secret || !siteUrl) return;
+
+  await Promise.allSettled(
+    SUB_AGENT_IDS.map((agent_id) =>
+      sendHeartbeat(siteUrl, secret, {
+        agent_id,
+        status: "idle",
+        current_task: "",
+      })
+    )
+  );
+}
+
 export async function GET() {
   const remoteSourceUrl = process.env.SUBAGENTS_SOURCE_URL;
   if (remoteSourceUrl) {
@@ -48,6 +143,8 @@ export async function GET() {
       });
       if (res.ok) {
         const remote = await res.json();
+        const remoteItems = Array.isArray(remote?.items) ? (remote.items as SessionRow[]) : [];
+        await syncSubagentHeartbeats(remoteItems);
         return Response.json({ ...remote, source: "remote" });
       }
     } catch {
@@ -56,7 +153,8 @@ export async function GET() {
   }
 
   try {
-    const { stdout } = await execFileAsync("openclaw", ["sessions", "--json", "--all-agents", "--active", "240"], {
+    // `--active 2` を基準に「現在稼働中」のみを拾う（未割当スロットを idle 表示にする）
+    const { stdout } = await execFileAsync("openclaw", ["sessions", "--json", "--all-agents", "--active", "2"], {
       timeout: 10_000,
       maxBuffer: 1024 * 1024,
     });
@@ -80,6 +178,7 @@ export async function GET() {
       })
       .sort((a, b) => a.ageMs - b.ageMs);
 
+    await syncSubagentHeartbeats(sessions);
     return Response.json({ ts: Date.now(), count: items.length, items, source: "local-openclaw" });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
@@ -87,6 +186,7 @@ export async function GET() {
 
     // Vercel/Serverless 環境では openclaw バイナリが存在しないため、機能非対応として返す
     if (code === "ENOENT" || /spawn\s+openclaw\s+ENOENT/i.test(message)) {
+      await markSubagentsIdle("待機中");
       return Response.json(
         {
           ts: Date.now(),
@@ -100,6 +200,7 @@ export async function GET() {
       );
     }
 
+    await markSubagentsIdle("取得待機");
     return Response.json({ ts: Date.now(), count: 0, items: [], error: "subagent source unavailable", detail: message, source: "error" }, { status: 200 });
   }
 }

@@ -8,7 +8,7 @@ import { getEffectiveStatus } from "../components/AgentStatusCard";
 import { formatRelativeTime, DOWN_THRESHOLD_MS } from "../../lib/utils";
 
 // 固定表示エージェント（要望反映）
-const SEED_AGENTS = ["openclaw-main", "claude-code", "sub-agent1", "sub-agent2", "sub-agent3"];
+const SEED_AGENTS = ["openclaw-main", "claude-code", "coding-agent", "designer", "debugger"];
 
 type AgentRow = {
   _id: string;
