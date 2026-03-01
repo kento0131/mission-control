@@ -5,6 +5,7 @@ import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { getEffectiveStatus } from "../components/AgentStatusCard";
 import { JobsTable } from "../components/JobsTable";
+import { SubagentsPanel } from "../components/SubagentsPanel";
 import { formatRelativeTime, DOWN_THRESHOLD_MS } from "../../lib/utils";
 import { ja } from "../../lib/i18n/ja";
 
@@ -788,6 +789,9 @@ export default function DashboardPage() {
           )}
         </div>
       </section>
+
+      {/* ── Subagents ── */}
+      <SubagentsPanel />
 
       {/* ── ジョブ履歴 ── */}
       <JobHistorySection />
