@@ -8,7 +8,7 @@ import { getEffectiveStatus } from "../components/AgentStatusCard";
 import { formatRelativeTime, DOWN_THRESHOLD_MS } from "../../lib/utils";
 
 // 固定表示エージェント（要望反映）
-const SEED_AGENTS = ["openclaw-main", "claude-code", "coding-agent", "designer", "debugger"];
+const SEED_AGENTS = ["openclaw-main", "claude-code"];
 
 type AgentRow = {
   _id: string;
@@ -210,7 +210,9 @@ export default function OfficePage() {
   const selectedAgent = selectedId ? dbMap.get(selectedId) ?? null : null;
 
   // アクティブエージェント数
-  const activeCount = (allAgents ?? []).filter((a) => {
+  const activeCount = allIds.filter((id) => {
+    const a = dbMap.get(id);
+    if (!a) return false;
     if (a.status === "stopped") return false;
     return Date.now() - a.last_seen <= DOWN_THRESHOLD_MS;
   }).length;

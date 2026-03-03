@@ -5,13 +5,13 @@ import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { getEffectiveStatus } from "../components/AgentStatusCard";
 import { JobsTable } from "../components/JobsTable";
-import { SubagentsPanel } from "../components/SubagentsPanel";
+
 import { formatRelativeTime, DOWN_THRESHOLD_MS } from "../../lib/utils";
 import { ja } from "../../lib/i18n/ja";
 
 // ── 定数 ──────────────────────────────────────────────
 // 固定表示エージェント（要望反映）
-const SEED_AGENTS = ["openclaw-main", "claude-code", "coding-agent", "designer", "debugger"];
+const SEED_AGENTS = ["openclaw-main", "claude-code"];
 
 /** 3状態ランプ: DOWN 判定と同じ閾値で揃える */
 const LAMP_OFFLINE_MS = DOWN_THRESHOLD_MS;
@@ -849,7 +849,9 @@ export default function DashboardPage() {
   }, [allModels, manualOpenclawModel]);
 
   // アクティブ数
-  const activeCount = (allAgents ?? []).filter((a) => {
+  const activeCount = agentIds.filter((id) => {
+    const a = agentMap.get(id);
+    if (!a) return false;
     if (a.status === "stopped") return false;
     return Date.now() - a.last_seen <= DOWN_THRESHOLD_MS;
   }).length;
@@ -857,13 +859,7 @@ export default function DashboardPage() {
   const selectedAgent  = selectedId ? agentMap.get(selectedId)  : undefined;
   const selectedModels = selectedId ? (modelMap.get(selectedId) ?? []) : [];
 
-  const runningSubagents = agentIds
-    .filter((id) => id.startsWith("sub-agent"))
-    .filter((id) => {
-      const a = agentMap.get(id);
-      if (!a) return false;
-      return getEffectiveStatus(a) === "running";
-    }).length;
+  const runningSubagents = 0;
 
   // 最新ジョブイベントを agent_id ごとに保持（実タスク表示用）
   const latestEventByAgent = useMemo(() => {
@@ -875,10 +871,15 @@ export default function DashboardPage() {
   }, [recentJobEvents]);
 
   const resolveDisplayTask = (id: string, agent?: AgentRow) => {
+    // openclaw-main は基本待機表示（実行中のみタスクを見せる）
+    if (id === "openclaw-main") {
+      if (!agent || getEffectiveStatus(agent) !== "running") return "";
+    }
+
     const ev = latestEventByAgent.get(id);
     if (ev?.type === "job_started") return ev.task;
     const t = agent?.current_task?.trim();
-    if (!t || t === "monitoring") return "";
+    if (!t || t === "monitoring" || t === "待機中") return "";
     return t;
   };
 
@@ -961,9 +962,6 @@ export default function DashboardPage() {
           )}
         </div>
       </section>
-
-      {/* ── Subagents ── */}
-      <SubagentsPanel />
 
       {/* ── ジョブ履歴 ── */}
       <JobHistorySection />
