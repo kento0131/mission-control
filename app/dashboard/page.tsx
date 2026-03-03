@@ -155,8 +155,9 @@ function StatusBadge({ status }: { status: keyof typeof STATUS_COLOR }) {
 type LampState = "offline" | "active" | "idle";
 
 function getLampState(agent: AgentRow | undefined): LampState {
-  if (!agent || Date.now() - agent.last_seen > LAMP_OFFLINE_MS) return "offline";
-  if (agent.current_task) return "active";
+  if (!agent) return "offline";
+  if (agent.status === "running" || agent.current_task) return "active";
+  if (Date.now() - agent.last_seen > LAMP_OFFLINE_MS) return "offline";
   return "idle";
 }
 
@@ -285,7 +286,7 @@ function AgentCard({
   const topModel = models[0];
   const isSubagent = agentId.startsWith("sub-agent");
   const shortTask = (displayTask || "").trim();
-  const taskText = shortTask ? (shortTask.length > 28 ? `${shortTask.slice(0, 28)}…` : shortTask) : "待機中";
+  const taskText = shortTask ? (shortTask.length > 28 ? `${shortTask.slice(0, 28)}…` : shortTask) : "";
 
   return (
     <div
@@ -337,16 +338,18 @@ function AgentCard({
         </p>
       )}
 
-      {/* task */}
-      <div style={{ display: "flex", gap: 4, alignItems: "baseline", marginBottom: 2 }}>
-        <span style={{ fontSize: "0.65rem", color: "var(--text-muted)", flexShrink: 0 }}>▶</span>
-        <span style={{
-          fontSize: "0.75rem", color: "var(--text)",
-          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-        }}>
-          {taskText}
-        </span>
-      </div>
+      {/* task (実行中のみ表示) */}
+      {taskText && (
+        <div style={{ display: "flex", gap: 4, alignItems: "baseline", marginBottom: 2 }}>
+          <span style={{ fontSize: "0.65rem", color: "var(--text-muted)", flexShrink: 0 }}>▶</span>
+          <span style={{
+            fontSize: "0.75rem", color: "var(--text)",
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          }}>
+            {taskText}
+          </span>
+        </div>
+      )}
 
       {/* model */}
       <div style={{ display: "flex", gap: 4, alignItems: "baseline", marginBottom: "0.625rem" }}>
@@ -853,6 +856,7 @@ export default function DashboardPage() {
     const a = agentMap.get(id);
     if (!a) return false;
     if (a.status === "stopped") return false;
+    if (a.status === "running") return true;
     return Date.now() - a.last_seen <= DOWN_THRESHOLD_MS;
   }).length;
 
