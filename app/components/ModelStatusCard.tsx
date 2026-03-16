@@ -91,7 +91,7 @@ export function ModelStatusCard({ agentId = "openclaw-main" }: { agentId?: strin
               </p>
               <PercentBar label="5時間枠の残り" value={m.remaining_percent} />
               {m.remaining_day_percent !== undefined && (
-                <PercentBar label="制限回復まであと（24時間枠）" value={m.remaining_day_percent} />
+                <PercentBar label="24時間枠の残り" value={m.remaining_day_percent} />
               )}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>

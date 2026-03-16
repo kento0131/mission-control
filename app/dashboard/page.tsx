@@ -53,6 +53,13 @@ const JOB_STATUS_COLOR: Record<string, string> = {
   failed:  "#ef4444",
 };
 
+const GLASS_PANEL = {
+  background: "linear-gradient(180deg, rgba(28,34,52,0.92) 0%, rgba(20,25,38,0.94) 100%)",
+  border: "1px solid rgba(148,163,184,0.2)",
+  boxShadow: "0 14px 40px rgba(5,10,25,0.35)",
+  backdropFilter: "blur(8px)",
+} as const;
+
 function getJobBadge(job: JobRow): string {
   if (job.status === "success") return "DONE";
   if (job.status === "failed") return "FAILED";
@@ -292,18 +299,35 @@ function AgentCard({
     <div
       onClick={onClick}
       style={{
-        backgroundColor: selected ? "var(--bg-card-hover)" : "var(--bg-card)",
-        border: `1px solid ${selected ? "rgba(255,255,255,0.18)" : "var(--border)"}`,
-        borderRadius: 12,
+        background: selected
+          ? "linear-gradient(165deg, rgba(47,68,111,0.38) 0%, rgba(28,34,52,0.96) 60%)"
+          : "linear-gradient(160deg, rgba(31,38,58,0.9) 0%, rgba(21,26,39,0.95) 70%)",
+        border: `1px solid ${selected ? "rgba(147,197,253,0.45)" : "rgba(148,163,184,0.2)"}`,
+        borderRadius: 16,
         padding: "1rem",
         cursor: "pointer",
-        transition: "border-color 0.15s, background-color 0.15s, opacity 0.3s, filter 0.3s",
+        transition: "all 0.2s ease, opacity 0.3s, filter 0.3s",
         opacity: isDown ? 0.38 : status === "stopped" ? 0.6 : 1,
         filter: isDown ? "grayscale(0.7)" : "none",
-        outline: selected ? "2px solid rgba(255,255,255,0.12)" : "none",
+        outline: selected ? "2px solid rgba(147,197,253,0.24)" : "none",
+        boxShadow: selected ? "0 12px 30px rgba(59,130,246,0.2)" : "0 8px 20px rgba(3,8,22,0.22)",
       }}
-      onMouseEnter={(e) => { if (!selected) (e.currentTarget as HTMLElement).style.backgroundColor = "var(--bg-card-hover)"; }}
-      onMouseLeave={(e) => { if (!selected) (e.currentTarget as HTMLElement).style.backgroundColor = "var(--bg-card)"; }}
+      onMouseEnter={(e) => {
+        if (!selected) {
+          const el = e.currentTarget as HTMLElement;
+          el.style.transform = "translateY(-2px)";
+          el.style.borderColor = "rgba(147,197,253,0.38)";
+          el.style.boxShadow = "0 14px 26px rgba(9,16,36,0.35)";
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!selected) {
+          const el = e.currentTarget as HTMLElement;
+          el.style.transform = "translateY(0px)";
+          el.style.borderColor = "rgba(148,163,184,0.2)";
+          el.style.boxShadow = "0 8px 20px rgba(3,8,22,0.22)";
+        }
+      }}
     >
       {/* 上段: avatar + status + last_seen + lamp */}
       <div style={{ display: "flex", alignItems: "flex-start", gap: "0.625rem", marginBottom: "0.625rem" }}>
@@ -367,7 +391,7 @@ function AgentCard({
         <>
           <MiniBar label="5時間枠の残り" value={topModel.remaining_percent} />
           {topModel.remaining_day_percent !== undefined && (
-            <MiniBar label="制限回復まであと（24時間枠）" value={topModel.remaining_day_percent} />
+            <MiniBar label="24時間枠の残り" value={topModel.remaining_day_percent} />
           )}
           <div style={{ marginTop: 2 }}>
             <NextModelUpdateText updatedAt={topModel.updated_at} />
@@ -450,8 +474,9 @@ function ActivityFeed({ jobs, events }: { jobs: JobRow[]; events: JobEventRow[] 
       {feed.map((item) => (
         <div key={item.id} style={{
           display: "flex", gap: "1rem", alignItems: "center",
-          padding: "0.5rem 1rem",
-          borderBottom: "1px solid var(--border)",
+          padding: "0.62rem 1rem",
+          borderBottom: "1px solid rgba(148,163,184,0.18)",
+          background: "linear-gradient(180deg, rgba(255,255,255,0.015), rgba(255,255,255,0))",
         }}>
           {/* 時刻 */}
           <span style={{
@@ -575,7 +600,7 @@ function DetailPanel({
                   <p style={{ fontFamily: "monospace", fontSize: "0.875rem", marginBottom: "0.5rem" }}>{m.model}</p>
                   <FullBar label="5時間枠の残り" value={m.remaining_percent} />
                   {m.remaining_day_percent !== undefined && (
-                    <FullBar label="制限回復まであと（24時間枠）" value={m.remaining_day_percent} />
+                    <FullBar label="24時間枠の残り" value={m.remaining_day_percent} />
                   )}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4, gap: 8 }}>
                     <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", margin: 0 }}>
@@ -691,9 +716,8 @@ function JobHistorySection() {
         {ja.job.historyTitle}
       </h2>
       <div style={{
-        backgroundColor: "var(--bg-card)",
-        border: "1px solid var(--border)",
-        borderRadius: "0.75rem",
+        ...GLASS_PANEL,
+        borderRadius: "0.95rem",
         overflow: "hidden",
       }}>
         {history === undefined ? (
@@ -888,27 +912,46 @@ export default function DashboardPage() {
   };
 
   return (
-    <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
+    <div style={{ maxWidth: "1240px", margin: "0 auto", padding: "0.25rem 0.35rem 1.25rem" }}>
 
       {/* ヘッダー */}
-      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1.5rem", flexWrap: "wrap" }}>
-        <h1 style={{ fontSize: "1.25rem", fontWeight: 600 }}>Mission Control</h1>
-        <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
-          {agentIds.length} {ja.common.agents} · {activeCount} {ja.common.active}
-        </span>
-        <span style={{ fontSize: "0.75rem", color: "#22c55e" }}>
+      <div style={{
+        ...GLASS_PANEL,
+        display: "flex",
+        alignItems: "center",
+        gap: "0.9rem",
+        marginBottom: "1.25rem",
+        padding: "1rem 1.15rem",
+        borderRadius: 16,
+        flexWrap: "wrap",
+      }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <h1 style={{ fontSize: "1.3rem", fontWeight: 700, letterSpacing: "0.01em" }}>Mission Control</h1>
+          <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
+            {agentIds.length} {ja.common.agents} · {activeCount} {ja.common.active}
+          </span>
+        </div>
+        <span style={{
+          fontSize: "0.72rem",
+          color: "#86efac",
+          background: "rgba(34,197,94,0.12)",
+          border: "1px solid rgba(34,197,94,0.4)",
+          borderRadius: 999,
+          padding: "0.3rem 0.55rem",
+          marginLeft: "auto",
+        }}>
           LIVE {liveTs ? `(${formatRelativeTime(liveTs)})` : "(connecting...)"}
         </span>
         <button
           onClick={refreshUsageNow}
           disabled={refreshingModel}
           style={{
-            marginLeft: "auto",
             fontSize: "0.75rem",
-            padding: "0.35rem 0.6rem",
-            borderRadius: 8,
-            border: "1px solid var(--border)",
-            background: "var(--bg-card)",
+            fontWeight: 600,
+            padding: "0.48rem 0.8rem",
+            borderRadius: 10,
+            border: "1px solid rgba(148,163,184,0.35)",
+            background: "linear-gradient(180deg, rgba(51,65,85,0.35), rgba(30,41,59,0.35))",
             color: "var(--text)",
             cursor: refreshingModel ? "default" : "pointer",
             opacity: refreshingModel ? 0.6 : 1,
@@ -924,8 +967,8 @@ export default function DashboardPage() {
       {/* ── エージェントグリッド ── */}
       <div style={{
         display: "grid",
-        gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))",
-        gap: "0.875rem",
+        gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+        gap: "0.95rem",
         marginBottom: "2rem",
       }}>
         {agentIds.map((id) => {
@@ -954,9 +997,8 @@ export default function DashboardPage() {
           {ja.feed.title}
         </h2>
         <div style={{
-          backgroundColor: "var(--bg-card)",
-          border: "1px solid var(--border)",
-          borderRadius: "0.75rem",
+          ...GLASS_PANEL,
+          borderRadius: "0.95rem",
           overflow: "hidden",
         }}>
           {recentJobs === undefined || recentJobEvents === undefined ? (
