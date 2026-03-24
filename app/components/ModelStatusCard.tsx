@@ -41,7 +41,7 @@ function NextModelUpdateText({ updatedAt }: { updatedAt: number }) {
   );
 }
 
-function PercentBar({ label, value }: { label: string; value: number }) {
+function PercentBar({ label, value, helper }: { label: string; value: number; helper?: string }) {
   const color = value > 20 ? "var(--green)" : value > 5 ? "var(--yellow)" : "var(--red)";
   return (
     <div style={{ marginBottom: "0.5rem" }}>
@@ -58,8 +58,22 @@ function PercentBar({ label, value }: { label: string; value: number }) {
           transition: "width 0.4s ease",
         }} />
       </div>
+      {helper && (
+        <div style={{ marginTop: 4, fontSize: "0.68rem", color: "var(--text-muted)" }}>
+          {helper}
+        </div>
+      )}
     </div>
   );
+}
+
+function extractRecoveryHint(raw?: string, kind?: "session" | "day") {
+  if (!raw) return undefined;
+  const text = raw.replace(/\s+/g, " ");
+  if (kind === "session") {
+    return text.match(/usage:.*?left\s*⏱([^·\n]+)/i)?.[1]?.trim();
+  }
+  return text.match(/Day\s+.*?left\s*⏱([^\n]+)/i)?.[1]?.trim();
 }
 
 export function ModelStatusCard({ agentId = "openclaw-main" }: { agentId?: string }) {
@@ -81,7 +95,10 @@ export function ModelStatusCard({ agentId = "openclaw-main" }: { agentId?: strin
         <p style={{ fontSize: "0.875rem", color: "var(--text-muted)" }}>No models reported</p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-          {models.map((m) => (
+          {models.map((m) => {
+            const sessionRecovery = extractRecoveryHint(m.raw, "session");
+            const dayRecovery = extractRecoveryHint(m.raw, "day");
+            return (
             <div key={m._id}>
               <p style={{
                 fontSize: "0.875rem", color: "var(--text)", fontFamily: "monospace",
@@ -89,9 +106,9 @@ export function ModelStatusCard({ agentId = "openclaw-main" }: { agentId?: strin
               }}>
                 {m.model}
               </p>
-              <PercentBar label="5時間枠の残り" value={m.remaining_percent} />
+              <PercentBar label="5時間枠の残り" value={m.remaining_percent} helper={sessionRecovery ? `100%に戻る目安: ${sessionRecovery}` : undefined} />
               {m.remaining_day_percent !== undefined && (
-                <PercentBar label="24時間枠の残り" value={m.remaining_day_percent} />
+                <PercentBar label="1日あたりの残り" value={m.remaining_day_percent} helper={dayRecovery ? `100%に戻る目安: ${dayRecovery}` : undefined} />
               )}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
@@ -100,7 +117,7 @@ export function ModelStatusCard({ agentId = "openclaw-main" }: { agentId?: strin
                 <NextModelUpdateText updatedAt={m.updated_at} />
               </div>
             </div>
-          ))}
+          )})}
         </div>
       )}
     </div>

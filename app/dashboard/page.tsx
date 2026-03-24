@@ -92,6 +92,13 @@ type ModelRow = {
   updated_at: number;
 };
 
+function extractRecoveryHint(raw?: string, kind?: "session" | "day") {
+  if (!raw) return undefined;
+  const text = raw.replace(/\s+/g, " ");
+  if (kind === "session") return text.match(/usage:.*?left\s*⏱([^·\n]+)/i)?.[1]?.trim();
+  return text.match(/Day\s+.*?left\s*⏱([^\n]+)/i)?.[1]?.trim();
+}
+
 type JobRow = {
   _id: string;
   job_id: string;
@@ -390,8 +397,18 @@ function AgentCard({
       {topModel ? (
         <>
           <MiniBar label="5時間枠の残り" value={topModel.remaining_percent} />
+          {extractRecoveryHint(topModel.raw, "session") && (
+            <div style={{ marginTop: -1, marginBottom: 4, fontSize: "0.62rem", color: "var(--text-muted)" }}>
+              100%に戻る目安: {extractRecoveryHint(topModel.raw, "session")}
+            </div>
+          )}
           {topModel.remaining_day_percent !== undefined && (
-            <MiniBar label="24時間枠の残り" value={topModel.remaining_day_percent} />
+            <MiniBar label="1日あたりの残り" value={topModel.remaining_day_percent} />
+          )}
+          {extractRecoveryHint(topModel.raw, "day") && (
+            <div style={{ marginTop: -1, marginBottom: 4, fontSize: "0.62rem", color: "var(--text-muted)" }}>
+              100%に戻る目安: {extractRecoveryHint(topModel.raw, "day")}
+            </div>
           )}
           <div style={{ marginTop: 2 }}>
             <NextModelUpdateText updatedAt={topModel.updated_at} />
